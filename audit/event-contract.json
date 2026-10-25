@@ -1,0 +1,29 @@
+{
+  "description": "Proposed normalized record, not the native Trino event schema.",
+  "deduplication_key": [
+    "query_id",
+    "event_type"
+  ],
+  "fields": [
+    "query_id",
+    "event_type",
+    "authenticated_user",
+    "groups",
+    "query_text_restricted",
+    "tables",
+    "columns",
+    "output_rows_if_available",
+    "status",
+    "error_code",
+    "event_timestamp",
+    "received_timestamp",
+    "policy_version",
+    "policy_digest"
+  ],
+  "limitations": [
+    "Query events do not enumerate all patients returned.",
+    "Authentication failures need separate logging.",
+    "Output rows do not prove the client viewed the result.",
+    "Validate available fields against the pinned release."
+  ]
+}

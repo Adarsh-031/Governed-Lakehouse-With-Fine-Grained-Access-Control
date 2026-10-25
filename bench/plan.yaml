@@ -1,0 +1,11 @@
+
+patient_counts: [1000, 10000, 100000]
+repetitions: 10
+metrics: [table_rows, stored_bytes, median_ms, p95_ms, cpu, memory, unauthorized_rows]
+controls:
+  - Record hardware, image versions, dataset seed, snapshots, policy digest.
+  - Separate cold and warm runs and document cache control.
+  - Compare equivalent outputs for baseline and enforced policy queries.
+  - Run unrestricted baselines only in an isolated benchmark environment.
+  - Verify outputs before reporting performance.
+  - Single-node runs do not demonstrate distributed scaling.

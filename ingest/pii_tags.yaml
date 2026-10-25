@@ -1,0 +1,8 @@
+
+# Documentation input; Trino does not read this file directly.
+patients:
+  patient_id: {classification: identifier, treatment: hmac_patient_token}
+  name: {classification: direct_identifier, treatment: restricted_identity_table}
+  ssn: {classification: direct_identifier, treatment: drop_unless_required}
+  birthdate: {classification: quasi_identifier, treatment: restrict_and_derive_age_band}
+  zip: {classification: quasi_identifier, treatment: generalize_and_evaluate_linkage}

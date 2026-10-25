@@ -1,0 +1,6 @@
+
+group,resource,rows,columns,operations
+doctor,clinical base tables,care_team patients,necessary clinical fields; identifiers restricted,SELECT
+researcher,research-approved base fields,approved cohort,tokens and generalized attributes; no direct identifiers,SELECT
+billing,claims,approved billing scope,payer and costs; review sensitive procedure codes,SELECT
+admin,setup resources,setup scope,setup scope,explicitly reviewed administrative operations

@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Code and configuration checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install 3.11
+
+      - name: Install locked dependencies
+        run: uv sync --locked --group dev --python 3.11
+
+      - name: Check Python lint
+        run: uv run --no-sync ruff check .
+
+      - name: Check Python formatting
+        run: uv run --no-sync ruff format --check .
+
+      - name: Check shell script syntax
+        shell: bash
+        run: |
+          while IFS= read -r -d '' file; do
+            echo "Checking $file"
+            bash -n "$file"
+          done < <(git ls-files -z '*.sh')
+
+      - name: Validate JSON, YAML, and notebook syntax
+        run: |
+          uv run --no-sync python - <<'PY'
+          import json
+          import subprocess
+          from pathlib import Path
+
+          import yaml
+
+          files = subprocess.check_output(
+              ["git", "ls-files", "-z"]
+          ).decode().split("\0")
+
+          for filename in filter(None, files):
+              path = Path(filename)
+              suffix = path.suffix.lower()
+
+              if suffix in {".json", ".ipynb"}:
+                  json.loads(path.read_text(encoding="utf-8"))
+                  print(f"Valid JSON: {path}")
+              elif suffix in {".yaml", ".yml"}:
+                  list(yaml.safe_load_all(path.read_text(encoding="utf-8")))
+                  print(f"Valid YAML: {path}")
+          PY
+
+      - name: Run unit tests
+        run: |
+          uv run --no-sync python - <<'PY'
+          from pathlib import Path
+          import subprocess
+          import sys
+
+          directory = Path("tests/unit")
+          tests = [
+              path
+              for path in directory.rglob("*.py")
+              if path.name.startswith("test_")
+              or path.name.endswith("_test.py")
+          ]
+
+          if not tests:
+              print("::warning::No unit tests exist yet; tests were not run.")
+              sys.exit(0)
+
+          sys.exit(
+              subprocess.call([
+                  "pytest",
+                  "tests/unit",
+                  "-v",
+                  "--strict-config",
+                  "--strict-markers",
+                  "--junitxml=unit-test-results.xml",
+              ])
+          )
+          PY

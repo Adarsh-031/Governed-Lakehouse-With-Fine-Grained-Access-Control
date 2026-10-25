@@ -1,0 +1,16 @@
+
+# Scaffold only. Select compatible images and pin versions before implementing.
+# This is deliberately not a runnable infrastructure stack.
+# Required services: storage, REST catalog, Trino, audit collector.
+# Publish only Trino TLS and optional demo UI on 127.0.0.1.
+# Keep storage/catalog/collector internal. Use named volumes for persistence.
+# Give ETL, Trino, and audit writer separate credentials and least privileges.
+# Add health checks, startup dependencies, TLS, and authenticated audit ingestion.
+services: {}
+networks:
+  backend:
+    internal: true
+volumes:
+  warehouse: {}
+  catalog_metadata: {}
+  audit_spool: {}
