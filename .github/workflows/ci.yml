@@ -76,6 +76,11 @@ jobs:
                   print(f"Valid YAML: {path}")
           PY
 
+      - name: Verify private storage and service permissions
+        env:
+          RUN_STORAGE_INTEGRATION: "1"
+        run: uv run --no-sync pytest tests/integration/test_storage.py -v --strict-config
+
       - name: Run unit tests
         run: |
           uv run --no-sync python - <<'PY'

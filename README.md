@@ -1,7 +1,8 @@
 
 # Governed Hospital Lakehouse
 
-Status: repository scaffold, not a running or security-validated platform.
+Status: private object storage is runnable and covered by a Docker acceptance
+test. Catalog, Trino, ingestion, and query authorization remain scaffolded.
 
 ## Goal
 Shared synthetic hospital tables queried through Trino with authenticated
@@ -28,8 +29,12 @@ Keep necessary clinical identity data in a separately restricted identity table.
    for output files, loading variables, and explicit rotation.
 4. Use the service image pins and catalog decision in
    [ADR-001](docs/architecture.md#adr-001-rest-catalog-and-service-versions).
-5. Implement compose.yaml from compose.yaml.example, TLS, credentials, networks,
-   health checks, and policies. The example is intentionally not runnable.
+5. Start private storage and initialize its bucket/service permissions:
+   `docker compose --env-file data/secrets/runtime.env up -d --wait storage`, then
+   `docker compose --env-file data/secrets/runtime.env run --rm storage-init`.
+   See [storage setup and checks](docker/storage/README.md). The real
+   `compose.yaml` implements storage only; `compose.yaml.example` retains the
+   complete image inventory for the remaining stack.
 6. Ingest a small Synthea sample and validate IDs/foreign keys.
 7. Implement and run permission tests before expanding tables and data size.
 
@@ -50,7 +55,9 @@ Generalization does not establish k-anonymity without measurement.
 Append-only grants do not establish tamper evidence.
 Query logs do not prove exactly which patient records a person viewed.
 Secret-generation tests check local credentials, TLS, permissions, and reruns.
-Runtime access-control tests and infrastructure integration are not implemented yet.
+Storage acceptance tests check anonymous denial, service S3 permissions, bootstrap
+reruns, and persistence. Storage uses HTTP on a private local Docker network;
+query authorization, end-to-end TLS, and full-stack integration are not validated yet.
 
 ## Repository map
 docker/: runtime configuration; ingest/: ETL and classification;

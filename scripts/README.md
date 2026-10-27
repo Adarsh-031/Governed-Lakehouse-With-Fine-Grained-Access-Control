@@ -49,15 +49,19 @@ set +a
 `HMAC_KEY_HEX` encodes 32 random bytes: decode with `bytes.fromhex` before using
 `patient_token`. Host paths in the env file are relative to the repository root;
 future container configuration must map them to container paths explicitly.
-For a future Compose stack, pass `--env-file data/secrets/runtime.env` and wire
-only the necessary secrets to each service. Mount only `password.db` and
+For the storage Compose stack, pass `--env-file data/secrets/runtime.env`;
+it wires only root credentials into storage and the eight storage variables
+into the short-lived bootstrap/check containers. See the
+[storage instructions](../docker/storage/README.md). Future services must likewise
+receive only their own credentials. Mount only `password.db` and
 `trino.pem` into Trino, read-only; distribute `ca.crt` to clients and configure
 certificate verification. Keep the CA private key and `runtime.env` on the host.
 
-Generation does not provision S3 users, OIDC clients, databases, grants, or
-server-managed groups. Runtime service setup must consume these variables and
-apply the separately reviewed permissions. These names are the project's
-bootstrap contract, not native configuration names for every service.
+Generation does not provision users, clients, databases, or grants. The storage
+init job now consumes the S3 variables to create users and apply the policies in
+`docker/storage/policies/`. OIDC/database/group provisioning remains future work.
+These names are the project's bootstrap contract, not native configuration names
+for every service.
 
 ## Preservation and rotation
 
