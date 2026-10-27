@@ -86,6 +86,11 @@ jobs:
           RUN_CATALOG_INTEGRATION: "1"
         run: uv run --no-sync pytest tests/integration/test_catalog.py -v --strict-config
 
+      - name: Verify Trino HTTPS authentication and system policy enforcement
+        env:
+          RUN_TRINO_INTEGRATION: "1"
+        run: uv run --no-sync pytest tests/integration/test_trino.py -v --strict-config
+
       - name: Run unit tests
         run: |
           uv run --no-sync python - <<'PY'

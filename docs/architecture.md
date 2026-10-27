@@ -97,7 +97,9 @@ the moving `current` documentation can describe different properties and default
 - Policies: validate `filter`, `filter_environment`, column `mask` and
   `mask_environment`, first-match ordering, and omitted-section defaults against
   [476 file access control](https://github.com/trinodb/trino/blob/476/docs/src/main/sphinx/security/file-system-access-control.md).
-  Existing `policies/rules.json` remains an unvalidated starting configuration.
+  `policies/rules.json` grants no data access. ADR-004 validates its loading and
+  the enforcement path with a separate synthetic filter/mask policy; clinical
+  policy coverage remains future work.
 - Audit: 476 includes the HTTP listener (`event-listener.name=http`),
   `http-event-listener.log-created`, `log-completed`, `connect-ingest-uri`,
   `connect-http-headers`, and bounded retry settings. Register the properties file
@@ -122,8 +124,8 @@ secured stack, create/write/read a small Iceberg v2 table through the REST catal
 recreate containers while preserving volumes, and verify the table remains
 readable. Then test identity isolation, row filters/masks, and created/completed
 audit delivery. Record the versions/digests and results; rerun these checks when
-changing a pin. Storage and catalog checks below are implemented; Trino and
-full-stack runtime/security checks have not been performed yet.
+changing a pin. Storage, catalog, and Trino checks below are implemented;
+clinical policies, audit delivery, and broader bypass tests remain future work.
 
 ## ADR-002: Private warehouse bootstrap and service storage permissions
 
@@ -260,3 +262,60 @@ identity/grant, and S3 persistence. It does not prove
 the Trino connector, hospital-user policies, audit delivery, or end-to-end TLS.
 See [catalog operations](../docker/catalog/README.md) and
 [local verification evidence](catalog-verification.md).
+
+## ADR-004: HTTPS Trino boundary and system Iceberg authorization
+
+Date: 2026-10-27. Addresses issue #13.
+
+Add the pinned Trino 476 coordinator/worker after successful `catalog-init`.
+It is the only service on a frontend network and publishes only
+`127.0.0.1:8443`; all service-to-service connections remain on the internal
+backend. Docker 29 did not allocate a host port when Trino joined only an
+internal network, so an additional frontend network is necessary for the
+required host access. Catalog, storage, authentication, and databases remain
+backend-only and publish no ports.
+
+Terminate client TLS directly in Trino using issue #4's PEM and local CA, with
+HTTP disabled, insecure HTTP authentication disabled, and forwarded headers
+ignored. Reuse its bcrypt password file and existing five users. The example
+doctor identity is `doctor_alice`, preserving generated credentials rather
+than introducing `doctor_1` or rotating secrets. A file group provider supplies
+server-managed group bindings; memberships do not themselves grant SQL access.
+
+Remove the empty legacy `principals` policy section: it blocked even an
+authenticated principal from using its own username. Use authenticated user
+mapping and the explicit empty impersonation rules instead, following Trino
+476's deprecation guidance for principal rules. Catalog/schema/table grants
+remain empty. No clinical policy is introduced by infrastructure setup.
+
+Use the private Lakekeeper REST endpoint, `hospital` warehouse, and Keycloak
+client-credentials flow under the Trino service identity. Mount the source
+`iceberg.properties` as `hospital.properties` to retain existing client catalog
+defaults. Set `iceberg.security=SYSTEM`: the connector delegates authorization,
+including row filters and column masks, to the system file access control
+loading `policies/rules.json`. REST OAuth2 authenticates the service and does
+not substitute for hospital-user authorization. Retain the scoped, read-only
+Trino S3 key with native path-style S3 and explicitly disable credential vending,
+as required by ADR-003.
+
+Keep only Trino's own service secrets in its environment; mount the password
+database, TLS PEM, and public CA read-only. Host UID/GID overrides preserve
+mode-0600 secret files while running without root. The single-node internal
+discovery/worker path uses loopback HTTPS, CA trust, and the generated shared
+secret. This does not turn the catalog/OIDC/storage HTTP paths into TLS.
+
+Use a read-only root filesystem, dropped capabilities, and tmpfs runtime data.
+A dedicated executable tmpfs is required for JNA/OSHI native library loading;
+general temporary/data mounts remain non-executable. Cap heap at 1 GiB for the
+small local test rather than allocating the image default of 80% of host RAM.
+This sizing and loopback internal address must be revisited for larger workloads
+or multiple workers. Query audit delivery remains separate work.
+
+The opt-in Trino acceptance test uses fresh credentials, CA, Compose project,
+volumes, and an ephemeral loopback port. It checks CA-verified CLI and protocol
+login, wrong/missing/unknown credentials, impersonation denial, server groups,
+the committed no-data-grants baseline, and private-service publication. An
+isolated policy copy then applies a doctor row filter and column mask to the
+two-row synthetic Iceberg table, with an unfiltered admin control and negative
+researcher/write checks. These checks verify the enforcement path; clinical
+policies, bypass coverage, and audit collection require their own tests.

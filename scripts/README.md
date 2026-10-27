@@ -57,13 +57,14 @@ For the storage Compose stack, pass `--env-file data/secrets/runtime.env`;
 it wires only root credentials into storage and the eight storage variables
 into the short-lived bootstrap/check containers. See the
 [storage instructions](../docker/storage/README.md). Future services must likewise
-receive only their own credentials. Mount only `password.db` and
-`trino.pem` into Trino, read-only; distribute `ca.crt` to clients and configure
+receive only their own credentials. Mount `password.db`, `trino.pem`, and the
+public `ca.crt` into Trino, read-only; distribute `ca.crt` to clients and configure
 certificate verification. Keep the CA private key and `runtime.env` on the host.
 
-Generation does not provision users, clients, databases, or grants. The storage
+Generation does not itself provision users, clients, databases, or grants. The storage
 init job now consumes the S3 variables to create users and apply the policies in
-`docker/storage/policies/`. OIDC/database/group provisioning remains future work.
+`docker/storage/policies/`. The catalog stack provisions OIDC clients/databases;
+Trino consumes the password hashes and server-managed `docker/trino/auth/groups.txt`.
 These names are the project's bootstrap contract, not native configuration names
 for every service.
 

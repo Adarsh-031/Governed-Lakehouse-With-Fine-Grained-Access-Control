@@ -2,8 +2,10 @@
 # Governed Hospital Lakehouse
 
 Status: private object storage and an authenticated Lakekeeper/Postgres catalog
-are runnable, with Docker acceptance tests for PyIceberg create/read and restart
-persistence. Trino, ingestion, and per-user query authorization remain scaffolded.
+are runnable alongside Trino 476 with HTTPS password login and system file
+authorization. Docker acceptance tests cover Iceberg create/read, persistence,
+and synthetic row-filter/mask enforcement. Ingestion and clinical policies remain
+to be implemented.
 
 ## Goal
 Shared synthetic hospital tables queried through Trino with authenticated
@@ -42,12 +44,16 @@ Keep necessary clinical identity data in a separately restricted identity table.
    `docker compose --env-file data/secrets/runtime.env run --rm --no-deps catalog-check`.
    See [catalog setup, decisions, and checks](docker/catalog/README.md).
    `compose.yaml.example` retains the complete image inventory.
-7. Add Trino (#13), then ingest a small Synthea sample and validate IDs/foreign keys.
+7. Start the HTTPS query boundary with
+   `docker compose --env-file data/secrets/runtime.env up -d --wait trino`.
+   See [Trino setup, login, and policy verification](docker/trino/README.md),
+   including secret-file UID/GID overrides when your host user is not UID 1000.
+   Then ingest a small Synthea sample and validate IDs/foreign keys.
 8. Implement and run permission tests before expanding tables and data size.
 
 ## Build order
 - [x] Choose catalog implementation and pin service versions (ADR-001).
-- [ ] Bring up private storage/catalog and authenticated Trino over TLS.
+- [x] Bring up private storage/catalog and authenticated Trino over TLS.
 - [ ] Load patients, encounters, claims, and care_team.
 - [ ] Restrict identities; implement doctor filters and researcher/billing masks.
 - [ ] Implement durable audit collection and query-ID reconciliation.
@@ -65,9 +71,13 @@ Secret-generation tests check local credentials, TLS, permissions, and reruns.
 Storage acceptance tests check anonymous denial, service S3 permissions, bootstrap
 reruns, and persistence. Catalog acceptance tests check authenticated PyIceberg
 create/append/read, service grants, and unchanged data/snapshots after recreating
-the catalog, storage, and all three databases. Internal services use HTTP on a
-private local Docker network; query authorization, end-to-end TLS, and Trino
-integration are not validated yet.
+the catalog, storage, and all three databases. Trino acceptance tests check
+CA-verified HTTPS authentication, wrong-password rejection, impersonation denial,
+server-managed groups, private-service ports, and system row filters/masks on
+synthetic Iceberg data. The committed policy still grants no data access;
+clinical rules and audit delivery remain unverified. Internal services use HTTP
+on a private local Docker network; TLS currently covers client-to-Trino and
+Trino's single-node internal communication.
 
 ## Repository map
 docker/: runtime configuration; ingest/: ETL and classification;

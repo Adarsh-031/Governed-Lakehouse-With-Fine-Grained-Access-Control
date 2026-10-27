@@ -14,9 +14,12 @@ pytestmark = pytest.mark.skipif(
 def test_private_storage_bootstrap_permissions_and_persistence(compose):
     configuration = json.loads(compose("config", "--format", "json"))
     assert configuration["networks"]["backend"]["internal"] is True
-    for service in configuration["services"].values():
-        assert not service.get("ports")
-        assert set(service["networks"]) == {"backend"}
+    for name, service in configuration["services"].items():
+        if name != "trino":
+            assert not service.get("ports")
+        assert set(service["networks"]) == (
+            {"backend", "frontend"} if name == "trino" else {"backend"}
+        )
 
     compose("up", "-d", "--wait", "storage")
     # A fresh bootstrap and a repeat must both succeed.
