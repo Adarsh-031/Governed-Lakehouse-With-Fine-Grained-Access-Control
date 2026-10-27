@@ -22,7 +22,10 @@ Keep necessary clinical identity data in a separately restricted identity table.
 ## Local development
 1. Install uv separately if needed, then run `uv sync --group dev`.
 2. Commit the resulting uv.lock after reviewing resolved dependencies.
-3. Copy .env.example to .env and generate secrets locally; never commit them.
+3. With Bash and OpenSSL installed, run `./scripts/init_secrets.sh` to generate
+   all local credentials and TLS files under `data/secrets/`. Repeating the
+   command preserves existing secrets. See [secret setup](scripts/README.md)
+   for output files, loading variables, and explicit rotation.
 4. Use the service image pins and catalog decision in
    [ADR-001](docs/architecture.md#adr-001-rest-catalog-and-service-versions).
 5. Implement compose.yaml from compose.yaml.example, TLS, credentials, networks,
@@ -46,7 +49,8 @@ HMAC is pseudonymization, not reversible encryption or anonymization.
 Generalization does not establish k-anonymity without measurement.
 Append-only grants do not establish tamper evidence.
 Query logs do not prove exactly which patient records a person viewed.
-No automated security tests or infrastructure integration are implemented yet.
+Secret-generation tests check local credentials, TLS, permissions, and reruns.
+Runtime access-control tests and infrastructure integration are not implemented yet.
 
 ## Repository map
 docker/: runtime configuration; ingest/: ETL and classification;
