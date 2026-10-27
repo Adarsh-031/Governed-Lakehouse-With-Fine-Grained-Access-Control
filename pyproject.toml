@@ -10,7 +10,13 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest", "ruff", "jupyterlab", "matplotlib"]
+dev = [
+    "pytest",
+    "ruff",
+    "jupyterlab",
+    "matplotlib",
+    "bcrypt>=5.0.0",
+]
 demo = ["streamlit"]
 
 [tool.uv]
