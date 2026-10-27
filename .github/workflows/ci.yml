@@ -87,32 +87,4 @@ jobs:
         run: uv run --no-sync pytest tests/integration/test_catalog.py -v --strict-config
 
       - name: Run unit tests
-        run: |
-          uv run --no-sync python - <<'PY'
-          from pathlib import Path
-          import subprocess
-          import sys
-
-          directory = Path("tests/unit")
-          tests = [
-              path
-              for path in directory.rglob("*.py")
-              if path.name.startswith("test_")
-              or path.name.endswith("_test.py")
-          ]
-
-          if not tests:
-              print("::warning::No unit tests exist yet; tests were not run.")
-              sys.exit(0)
-
-          sys.exit(
-              subprocess.call([
-                  "pytest",
-                  "tests/unit",
-                  "-v",
-                  "--strict-config",
-                  "--strict-markers",
-                  "--junitxml=unit-test-results.xml",
-              ])
-          )
-          PY
+        run: uv run --no-sync pytest tests/unit -v --strict-config --strict-markers --junitxml=unit-test-results.xml
