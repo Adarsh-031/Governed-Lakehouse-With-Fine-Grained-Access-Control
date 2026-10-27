@@ -149,6 +149,34 @@ def test_certificate_chain_names_and_key(generated):
     )
 
 
+def test_upgrade_adds_bootstrap_secret_without_rotating_existing_material(generated):
+    directory = generated / "data" / "secrets"
+    runtime = directory / "runtime.env"
+    runtime.write_text(
+        "\n".join(
+            line
+            for line in runtime.read_text().splitlines()
+            if not line.startswith("CATALOG_BOOTSTRAP_OIDC_CLIENT_SECRET=")
+        )
+        + "\n"
+    )
+    old_values = env_values(directory)
+    old_files = snapshot(directory)
+    result = run_init(generated)
+    assert result.returncode == 0, result.stderr
+    values = env_values(directory)
+    assert {name: values[name] for name in old_values} == old_values
+    assert len(bytes.fromhex(values["CATALOG_BOOTSTRAP_OIDC_CLIENT_SECRET"])) == 32
+    assert all(
+        (directory / name).read_bytes() == value
+        for name, value in old_files.items()
+        if name != "runtime.env"
+    )
+    upgraded = snapshot(directory)
+    assert run_init(generated).returncode == 0
+    assert snapshot(directory) == upgraded
+
+
 def test_rerun_preserves_every_byte_and_force_rotates(generated):
     directory = generated / "data" / "secrets"
     before = snapshot(directory)

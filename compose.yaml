@@ -1,4 +1,56 @@
-# Storage slice of ADR-001. Catalog, Trino and audit services follow separately.
+# Private storage and authenticated catalog slices of ADR-001. Trino follows in #13.
+x-catalog-image: &catalog-image quay.io/lakekeeper/catalog:v0.14.0
+x-postgres: &postgres
+  image: postgres:17.11-bookworm
+  networks: [backend]
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+    interval: 5s
+    timeout: 3s
+    retries: 20
+    start_period: 10s
+x-catalog-environment: &catalog-environment
+  LAKEKEEPER__PG_HOST_W: catalog-db
+  LAKEKEEPER__PG_PORT: "5432"
+  LAKEKEEPER__PG_USER: lakekeeper
+  LAKEKEEPER__PG_DATABASE: lakekeeper
+  LAKEKEEPER__PG_PASSWORD: ${CATALOG_DB_PASSWORD:?Catalog database password is required}
+  LAKEKEEPER__PG_SSL_MODE: disable
+  LAKEKEEPER__PG_ENCRYPTION_KEY: ${LAKEKEEPER_ENCRYPTION_KEY:?Catalog encryption key is required}
+  LAKEKEEPER__AUTHZ_BACKEND: openfga
+  LAKEKEEPER__OPENFGA__ENDPOINT: http://openfga:8081
+  LAKEKEEPER__OPENFGA__API_KEY: ${OPENFGA_PRESHARED_KEY:?OpenFGA API key is required}
+  LAKEKEEPER__OPENID_PROVIDER_URI: http://keycloak:8080/realms/lakehouse
+  LAKEKEEPER__OPENID_AUDIENCE: lakekeeper
+  LAKEKEEPER__OPENID_SUBJECT_CLAIM: sub
+  LAKEKEEPER__ENABLE_DEFAULT_PROJECT: "true"
+  LAKEKEEPER__USE_X_FORWARDED_HEADERS: "false"
+  LAKEKEEPER__DEBUG__LOG_REQUEST_BODIES: "false"
+  RUST_LOG: info
+x-openfga-environment: &openfga-environment
+  OPENFGA_DATASTORE_ENGINE: postgres
+  OPENFGA_DATASTORE_URI: postgres://openfga:${OPENFGA_DB_PASSWORD:?OpenFGA database password is required}@openfga-db:5432/openfga?sslmode=disable
+x-catalog-client: &catalog-client
+  image: governed-lakehouse-catalog-tools:local
+  build:
+    context: .
+    dockerfile: docker/catalog/Dockerfile
+  networks: [backend]
+  read_only: true
+  tmpfs:
+    - /tmp:mode=1777
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  restart: "no"
+  environment: &catalog-client-environment
+    ETL_OIDC_CLIENT_SECRET: ${ETL_OIDC_CLIENT_SECRET:?ETL OIDC secret is required}
+    ETL_STORAGE_ACCESS_KEY: ${ETL_STORAGE_ACCESS_KEY:?ETL access key is required}
+    ETL_STORAGE_SECRET_KEY: ${ETL_STORAGE_SECRET_KEY:?ETL secret key is required}
+    TRINO_OIDC_CLIENT_SECRET: ${TRINO_OIDC_CLIENT_SECRET:?Trino OIDC secret is required}
+    TRINO_STORAGE_ACCESS_KEY: ${TRINO_STORAGE_ACCESS_KEY:?Trino access key is required}
+    TRINO_STORAGE_SECRET_KEY: ${TRINO_STORAGE_SECRET_KEY:?Trino secret key is required}
+    AUDIT_WRITER_OIDC_CLIENT_SECRET: ${AUDIT_WRITER_OIDC_CLIENT_SECRET:?Audit OIDC secret is required}
 x-storage-image: &storage-image pgsty/silo:RELEASE.2026-09-03T13-18-01Z
 x-bootstrap-environment: &bootstrap-environment
   STORAGE_ROOT_USER: ${STORAGE_ROOT_USER:?Run scripts/init_secrets.sh and pass --env-file data/secrets/runtime.env}
@@ -65,9 +117,162 @@ services:
         condition: service_completed_successfully
     restart: "no"
 
+  catalog-db:
+    <<: *postgres
+    environment:
+      POSTGRES_USER: lakekeeper
+      POSTGRES_DB: lakekeeper
+      POSTGRES_PASSWORD: ${CATALOG_DB_PASSWORD:?Catalog database password is required}
+    volumes:
+      - catalog_metadata:/var/lib/postgresql/data
+
+  keycloak-db:
+    <<: *postgres
+    environment:
+      POSTGRES_USER: keycloak
+      POSTGRES_DB: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?Keycloak database password is required}
+    volumes:
+      - keycloak_metadata:/var/lib/postgresql/data
+
+  openfga-db:
+    <<: *postgres
+    environment:
+      POSTGRES_USER: openfga
+      POSTGRES_DB: openfga
+      POSTGRES_PASSWORD: ${OPENFGA_DB_PASSWORD:?OpenFGA database password is required}
+    volumes:
+      - openfga_metadata:/var/lib/postgresql/data
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0.7
+    command: ["start", "--import-realm"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?Keycloak database password is required}
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Keycloak admin password is required}
+      KC_HOSTNAME: http://keycloak:8080
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+      CATALOG_BOOTSTRAP_OIDC_CLIENT_SECRET: ${CATALOG_BOOTSTRAP_OIDC_CLIENT_SECRET:?Run scripts/init_secrets.sh to add the bootstrap secret}
+      ETL_OIDC_CLIENT_SECRET: ${ETL_OIDC_CLIENT_SECRET:?ETL OIDC secret is required}
+      TRINO_OIDC_CLIENT_SECRET: ${TRINO_OIDC_CLIENT_SECRET:?Trino OIDC secret is required}
+      AUDIT_WRITER_OIDC_CLIENT_SECRET: ${AUDIT_WRITER_OIDC_CLIENT_SECRET:?Audit OIDC secret is required}
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    volumes:
+      - ./docker/catalog/realm.json:/opt/keycloak/data/import/lakehouse-realm.json:ro
+    networks: [backend]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000; printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3; grep -q '\"status\": \"UP\"' <&3"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  openfga-migrate:
+    image: openfga/openfga:v1.14.0
+    command: ["migrate"]
+    environment: *openfga-environment
+    networks: [backend]
+    depends_on:
+      openfga-db:
+        condition: service_healthy
+    restart: "no"
+
+  openfga:
+    image: openfga/openfga:v1.14.0
+    command: ["run"]
+    environment:
+      <<: *openfga-environment
+      OPENFGA_AUTHN_METHOD: preshared
+      OPENFGA_AUTHN_PRESHARED_KEYS: ${OPENFGA_PRESHARED_KEY:?OpenFGA API key is required}
+      OPENFGA_PLAYGROUND_ENABLED: "false"
+    depends_on:
+      openfga-migrate:
+        condition: service_completed_successfully
+    networks: [backend]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/grpc_health_probe", "-addr=localhost:8081"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  catalog-migrate:
+    image: *catalog-image
+    command: ["migrate"]
+    environment: *catalog-environment
+    depends_on:
+      catalog-db:
+        condition: service_healthy
+      openfga:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    networks: [backend]
+    restart: "no"
+
+  catalog:
+    image: *catalog-image
+    command: ["serve"]
+    environment: *catalog-environment
+    depends_on:
+      catalog-db:
+        condition: service_healthy
+      catalog-migrate:
+        condition: service_completed_successfully
+      storage:
+        condition: service_healthy
+      storage-init:
+        condition: service_completed_successfully
+      keycloak:
+        condition: service_healthy
+      openfga:
+        condition: service_healthy
+    networks: [backend]
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/home/nonroot/lakekeeper", "healthcheck"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  catalog-init:
+    <<: *catalog-client
+    command: ["/app/bootstrap.py"]
+    environment:
+      <<: *catalog-client-environment
+      CATALOG_BOOTSTRAP_OIDC_CLIENT_SECRET: ${CATALOG_BOOTSTRAP_OIDC_CLIENT_SECRET:?Bootstrap OIDC secret is required}
+    depends_on:
+      catalog:
+        condition: service_healthy
+
+  catalog-check:
+    <<: *catalog-client
+    profiles: [test]
+    command: ["/app/check.py", "create"]
+    depends_on:
+      catalog-init:
+        condition: service_completed_successfully
+
 networks:
   backend:
     internal: true
 
 volumes:
   warehouse: {}
+  catalog_metadata: {}
+  keycloak_metadata: {}
+  openfga_metadata: {}

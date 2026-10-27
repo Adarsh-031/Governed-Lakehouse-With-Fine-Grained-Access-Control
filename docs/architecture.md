@@ -122,8 +122,8 @@ secured stack, create/write/read a small Iceberg v2 table through the REST catal
 recreate containers while preserving volumes, and verify the table remains
 readable. Then test identity isolation, row filters/masks, and created/completed
 audit delivery. Record the versions/digests and results; rerun these checks when
-changing a pin. The storage-only checks below are implemented; these full-stack
-runtime/security checks have not been performed yet.
+changing a pin. Storage and catalog checks below are implemented; Trino and
+full-stack runtime/security checks have not been performed yet.
 
 ## ADR-002: Private warehouse bootstrap and service storage permissions
 
@@ -186,3 +186,77 @@ service operations, bootstrap reruns and privilege drift, and object/IAM surviva
 after container recreation. It uses an isolated Compose project and temporary
 credentials and removes only its own resources. This verifies storage behavior;
 it does not establish Iceberg/REST interoperability or per-user Trino enforcement.
+
+## ADR-003: Authenticated persistent catalog and silver warehouse
+
+Date: 2026-10-27. Status: accepted and locally verified for issue #12.
+
+Implement ADR-001's Lakekeeper v0.14.0 pin with a dedicated PostgreSQL 17.11
+database and `catalog_metadata` volume. Reuse the catalog image's `migrate`
+command before `serve`; its migration also installs the OpenFGA authorization
+model. Do not rely on process startup or a fixed sleep as readiness. The runtime
+waits for healthy dependencies, successful migrations, and storage bootstrap,
+and exposes its built-in healthcheck. Nothing in this slice publishes host ports.
+
+Include Keycloak and OpenFGA now, rather than introduce an unauthenticated
+catalog that #13 must later retrofit. Keycloak runs its normal `start` profile
+with a separate persistent Postgres database; OpenFGA also has its own database
+and migration job. A pre-shared API key authenticates Lakekeeper to OpenFGA,
+using the already generated `OPENFGA_PRESHARED_KEY`; OIDC client credentials
+authenticate ETL/Trino/audit services to Lakekeeper, with issuer and audience
+validation. Persist identity and grant state independently so recreating the
+catalog does not change service identities or lose authorization.
+
+Use a dedicated `catalog-bootstrap` confidential client for server administration
+and warehouse registration. ETL is not the instance administrator. Add its own
+random secret to the existing secret generator; upgrading an existing generated
+set only appends that missing variable, preserving all other credentials and
+key material. Keycloak's import reads secrets from environment placeholders, so
+no credentials are embedded in the committed realm. Import is initialization,
+not a live credential-rotation mechanism.
+
+Register the `hospital` warehouse in the default NIL project at
+`s3://warehouse/silver/`, with Silo's private endpoint, region `us-east-1`, and
+path-style S3 access. This establishes a silver warehouse for #13 without
+loosening ADR-002's prefix policies. A root warehouse would require extra bucket
+privileges and admit clinical/audit location overlap. Additional gold, identity,
+and audit warehouses are separate future registrations with reviewed grants.
+
+Lakekeeper stores the existing scoped ETL storage key encrypted in Postgres;
+the catalog runtime receives no S3 administrator credentials. Sharing that key
+with the catalog is an explicit trusted clinical-writer decision: the catalog
+must write Iceberg metadata. It cannot access audit data or administer storage.
+The ETL principal has catalog describe/select/create/modify grants; Trino has
+describe/select only; the audit writer has no clinical warehouse grant. Managed
+grants are reconciled on bootstrap reruns, with no table/object replacement.
+
+Disable both STS vending and remote signing. With this small static service-key
+model, vending or signing with the catalog's ETL authority could undermine
+Trino's read-only S3 identity. Clients explicitly carry their own scoped storage
+keys. #13 must disable vended credentials and use its existing Trino S3 keys.
+Future temporary-credential vending requires a separate permissions review and
+negative tests for storage authority. Hospital-user row filters and column masks
+remain Trino's responsibility, independent of these service grants.
+
+Use a non-root Python helper image based on pinned Python 3.11.14 and uv 0.13.1,
+installing the project's locked runtime dependencies at build time. One helper
+performs secret-safe authenticated bootstrap, another proves real PyIceberg
+create/append/read. Both run on the backend with a read-only filesystem; only
+bootstrap gets the catalog administrator secret. The build context excludes
+host secrets and data. This avoids temporary host-port publication and adding a
+notebook server simply to run a smoke check.
+
+Internal HTTP (including OIDC token exchange and database transport) is confined
+to this single-host private Docker boundary. It is an explicit local limitation;
+extending the deployment requires internal TLS. No unauthenticated catalog,
+interactive demo credentials, or public admin UI is enabled.
+
+The acceptance test checks exact synthetic rows through fresh ETL and Trino
+PyIceberg clients, denies Trino catalog mutations and unauthenticated/audit
+clinical access, and recreates storage plus all three databases and their
+consumers. It compares the table location, metadata location, snapshot ID, and
+data before any post-recreation initialization. This verifies catalog,
+identity/grant, and S3 persistence. It does not prove
+the Trino connector, hospital-user policies, audit delivery, or end-to-end TLS.
+See [catalog operations](../docker/catalog/README.md) and
+[local verification evidence](catalog-verification.md).

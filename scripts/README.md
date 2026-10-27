@@ -25,6 +25,10 @@ Generated files, all ignored by Git:
   and OIDC client secrets, storage admin credentials, separate database
   passwords for catalog/Keycloak/OpenFGA, a Keycloak admin password, an OpenFGA
   preshared key, and Lakekeeper's secret-encryption key required by ADR-001.
+  It also includes `CATALOG_BOOTSTRAP_OIDC_CLIENT_SECRET`, the separate catalog
+  administrator service identity. Rerunning against an issue #4 secret set adds
+  only this missing key; existing credentials and TLS/HMAC/encryption keys remain
+  unchanged. It does not update secrets already imported into Keycloak.
 - `data/secrets/password.db`: `username:bcrypt` records with cost 12 and the
   `$2y$` prefix documented by [Trino 476 password authentication](https://github.com/trinodb/trino/blob/476/docs/src/main/sphinx/security/password-file.md).
 - `data/secrets/ca.key` and `ca.crt`: private local CA and self-signed CA

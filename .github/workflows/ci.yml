@@ -81,6 +81,11 @@ jobs:
           RUN_STORAGE_INTEGRATION: "1"
         run: uv run --no-sync pytest tests/integration/test_storage.py -v --strict-config
 
+      - name: Verify authenticated catalog and Iceberg persistence
+        env:
+          RUN_CATALOG_INTEGRATION: "1"
+        run: uv run --no-sync pytest tests/integration/test_catalog.py -v --strict-config
+
       - name: Run unit tests
         run: |
           uv run --no-sync python - <<'PY'

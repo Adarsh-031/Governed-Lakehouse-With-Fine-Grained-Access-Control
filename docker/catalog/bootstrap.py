@@ -1,0 +1,80 @@
+"""Rerunnable authenticated server, warehouse, and service-grant bootstrap."""
+
+import os
+
+from common import PROJECT, WAREHOUSE, access_token, management, run
+
+PROFILE = {
+    "type": "s3",
+    "bucket": "warehouse",
+    "key-prefix": "silver",
+    # Lakekeeper serializes an endpoint's empty path as '/'. Compare canonical form.
+    "endpoint": "http://storage:9000/",
+    "region": "us-east-1",
+    "path-style-access": True,
+    "flavor": "s3-compat",
+    # Clients keep their own scoped S3 credentials; do not delegate the ETL key.
+    "sts-enabled": False,
+    "remote-signing-enabled": False,
+}
+
+
+def main():
+    admin = access_token("catalog-bootstrap")
+    info = management("GET", "info", admin)
+    if not info["bootstrapped"]:
+        management("POST", "bootstrap", admin, json={"accept-terms-of-use": True}, expected=(204,))
+    warehouses = management("GET", "warehouse", admin)["warehouses"]
+    warehouse = next((w for w in warehouses if w["name"] == WAREHOUSE), None)
+    if warehouse is None:
+        warehouse = management(
+            "POST",
+            "warehouse",
+            admin,
+            expected=(201,),
+            json={
+                "warehouse-name": WAREHOUSE,
+                "project-id": PROJECT,
+                "storage-profile": PROFILE,
+                "storage-credential": {
+                    "type": "s3",
+                    "credential-type": "access-key",
+                    "access-key-id": os.environ["ETL_STORAGE_ACCESS_KEY"],
+                    "secret-access-key": os.environ["ETL_STORAGE_SECRET_KEY"],
+                },
+            },
+        )
+    else:
+        actual = warehouse["storage-profile"]
+        if any(actual.get(key) != value for key, value in PROFILE.items()):
+            raise RuntimeError("Existing hospital warehouse has a different storage profile")
+    warehouse_id = warehouse["warehouse-id"]
+    path = f"permissions/warehouse/{warehouse_id}/assignments"
+    assignments = management("GET", path, admin)["assignments"]
+    for service, relations in (
+        ("etl", {"describe", "select", "create", "modify"}),
+        ("trino", {"describe", "select"}),
+        ("audit-writer", set()),
+    ):
+        # Self-provisioning gets the verified OIDC subject from Lakekeeper itself.
+        user = management(
+            "POST",
+            "user",
+            access_token(service),
+            json={"update-if-exists": True},
+            expected=(200, 201),
+        )["id"]
+        current = [assignment for assignment in assignments if assignment.get("user") == user]
+        desired = [{"type": relation, "user": user} for relation in sorted(relations)]
+        writes = [a for a in desired if a not in current]
+        deletes = [a for a in current if a not in desired]
+        if writes or deletes:
+            management(
+                "POST", path, admin, json={"writes": writes, "deletes": deletes}, expected=(204,)
+            )
+    print("PASS: authenticated bootstrap; hospital warehouse at s3://warehouse/silver/")
+    print("PASS: ETL write, Trino read, audit-writer excluded; credential vending disabled")
+
+
+if __name__ == "__main__":
+    run(main)
