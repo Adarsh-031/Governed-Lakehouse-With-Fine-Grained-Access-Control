@@ -1,5 +1,5 @@
 
-# Image inventory only. Runnable storage/catalog stack: compose.yaml.
+# Image inventory only. Runnable storage/catalog/Trino stack: compose.yaml.
 # This is deliberately not a runnable infrastructure stack.
 # Required services: storage, REST catalog, Trino, catalog/auth databases,
 # OIDC provider, catalog authorizer, and the project-owned audit collector.

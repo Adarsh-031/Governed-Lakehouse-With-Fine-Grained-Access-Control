@@ -1,0 +1,4 @@
+admin:admin
+doctor:doctor_alice,doctor_bob
+researcher:researcher
+billing:billing
