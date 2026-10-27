@@ -6,7 +6,6 @@ import pytest
 
 from ingest.tokenization import patient_token
 
-
 KEY = b"a" * 32
 OTHER_KEY = b"b" * 32
 PATIENT_ID = "patient-123"
