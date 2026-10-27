@@ -23,14 +23,15 @@ Keep necessary clinical identity data in a separately restricted identity table.
 1. Install uv separately if needed, then run `uv sync --group dev`.
 2. Commit the resulting uv.lock after reviewing resolved dependencies.
 3. Copy .env.example to .env and generate secrets locally; never commit them.
-4. Select and pin compatible Trino/storage/catalog images.
+4. Use the service image pins and catalog decision in
+   [ADR-001](docs/architecture.md#adr-001-rest-catalog-and-service-versions).
 5. Implement compose.yaml from compose.yaml.example, TLS, credentials, networks,
    health checks, and policies. The example is intentionally not runnable.
 6. Ingest a small Synthea sample and validate IDs/foreign keys.
 7. Implement and run permission tests before expanding tables and data size.
 
 ## Build order
-- [ ] Choose catalog implementation and pin service versions.
+- [x] Choose catalog implementation and pin service versions (ADR-001).
 - [ ] Bring up private storage/catalog and authenticated Trino over TLS.
 - [ ] Load patients, encounters, claims, and care_team.
 - [ ] Restrict identities; implement doctor filters and researcher/billing masks.

@@ -3,7 +3,9 @@
 
 The supplied rules.json intentionally grants no data access. It is a starting
 deny configuration, not a completed or universally deny-all Trino policy.
-Validate its schema against the pinned Trino release before deployment.
+Validate its schema against Trino 476 before deployment; see
+[ADR-001](../docs/architecture.md#version-specific-implementation-contract)
+for the release-specific policy reference.
 Explicitly review every operation category, including functions, procedures,
 session properties, system information, authorization, and metadata visibility.
 

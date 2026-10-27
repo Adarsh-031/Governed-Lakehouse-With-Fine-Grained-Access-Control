@@ -1,11 +1,23 @@
 
-# Scaffold only. Select compatible images and pin versions before implementing.
+# Scaffold only. Image selection: docs/architecture.md, ADR-001.
 # This is deliberately not a runnable infrastructure stack.
-# Required services: storage, REST catalog, Trino, audit collector.
+# Required services: storage, REST catalog, Trino, catalog/auth databases,
+# OIDC provider, catalog authorizer, and the project-owned audit collector.
 # Publish only Trino TLS and optional demo UI on 127.0.0.1.
 # Keep storage/catalog/collector internal. Use named volumes for persistence.
 # Give ETL, Trino, and audit writer separate credentials and least privileges.
 # Add health checks, startup dependencies, TLS, and authenticated audit ingestion.
+# Inventory for the future service definitions; x- fields do not start services.
+# Reuse catalog for migrations, storage for bucket setup, and postgres for each
+# isolated catalog/Keycloak/OpenFGA database. Pin any new helper/base image too.
+x-images:
+  trino: trinodb/trino:476
+  storage: pgsty/silo:RELEASE.2026-09-03T13-18-01Z
+  catalog: quay.io/lakekeeper/catalog:v0.14.0
+  postgres: postgres:17.11-bookworm
+  oidc: quay.io/keycloak/keycloak:26.0.7
+  authorizer: openfga/openfga:v1.14.0
+
 services: {}
 networks:
   backend:
