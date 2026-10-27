@@ -50,6 +50,7 @@ def generate(directory: Path) -> None:
         "STORAGE_ROOT_PASSWORD": secrets.token_hex(32),
         "LAKEKEEPER_ENCRYPTION_KEY": secrets.token_hex(32),
         "CATALOG_DB_PASSWORD": secrets.token_hex(32),
+        "CATALOG_BOOTSTRAP_OIDC_CLIENT_SECRET": secrets.token_hex(32),
         "KEYCLOAK_DB_PASSWORD": secrets.token_hex(32),
         "OPENFGA_DB_PASSWORD": secrets.token_hex(32),
         "KEYCLOAK_ADMIN_PASSWORD": secrets.token_hex(32),
@@ -174,6 +175,18 @@ def initialize(directory: Path, *, force: bool = False) -> bool:
                 )
             for path in existing:
                 path.chmod(0o600)
+            # Add issue #12's bootstrap identity without rotating existing encryption,
+            # database, S3, HMAC, or TLS material from issue #4.
+            runtime = directory / "runtime.env"
+            content = runtime.read_text(encoding="ascii")
+            if not any(
+                line.startswith("CATALOG_BOOTSTRAP_OIDC_CLIENT_SECRET=")
+                for line in content.splitlines()
+            ):
+                with tempfile.NamedTemporaryFile(mode="w", dir=directory, delete=False) as file:
+                    file.write(content.rstrip("\n") + "\n")
+                    file.write(f"CATALOG_BOOTSTRAP_OIDC_CLIENT_SECRET={secrets.token_hex(32)}\n")
+                os.replace(file.name, runtime)
             return False
         if shutil.which("openssl") is None:
             raise ValueError("OpenSSL is required; install it before generating secrets.")

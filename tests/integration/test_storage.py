@@ -2,66 +2,13 @@
 
 import json
 import os
-import secrets
-import subprocess
-from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[2]
 pytestmark = pytest.mark.skipif(
     os.environ.get("RUN_STORAGE_INTEGRATION") != "1",
     reason="Set RUN_STORAGE_INTEGRATION=1 to run the Docker storage acceptance test.",
 )
-
-
-@pytest.fixture
-def compose(tmp_path):
-    values = {
-        "STORAGE_ROOT_USER": "test_storage_admin",
-        "STORAGE_ROOT_PASSWORD": secrets.token_hex(32),
-    }
-    for service in ("ETL", "TRINO", "AUDIT_WRITER"):
-        values[f"{service}_STORAGE_ACCESS_KEY"] = secrets.token_hex(10).upper()
-        values[f"{service}_STORAGE_SECRET_KEY"] = secrets.token_hex(32)
-    env_file = tmp_path / "storage.env"
-    env_file.touch(mode=0o600)
-    env_file.write_text("".join(f"{key}={value}\n" for key, value in values.items()))
-    command = [
-        "docker",
-        "compose",
-        "--project-name",
-        f"lakehouse-storage-test-{secrets.token_hex(6)}",
-        "--file",
-        str(ROOT / "compose.yaml"),
-        "--env-file",
-        str(env_file),
-    ]
-    # Prevent ambient shell credentials from overriding this isolated env file.
-    environment = {key: value for key, value in os.environ.items() if key not in values}
-
-    def run(*args, expect_success=True):
-        result = subprocess.run(
-            [*command, *args],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=180,
-            env=environment,
-        )
-        output = result.stdout + result.stderr
-        for value in values.values():
-            output = output.replace(value, "<redacted>")
-        if expect_success:
-            assert result.returncode == 0, output
-        else:
-            assert result.returncode != 0, "An operation expected to fail succeeded."
-        return output
-
-    try:
-        yield run
-    finally:
-        run("down", "--volumes", "--remove-orphans")
 
 
 def test_private_storage_bootstrap_permissions_and_persistence(compose):

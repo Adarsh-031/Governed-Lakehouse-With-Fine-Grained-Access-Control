@@ -1,8 +1,9 @@
 
 # Governed Hospital Lakehouse
 
-Status: private object storage is runnable and covered by a Docker acceptance
-test. Catalog, Trino, ingestion, and query authorization remain scaffolded.
+Status: private object storage and an authenticated Lakekeeper/Postgres catalog
+are runnable, with Docker acceptance tests for PyIceberg create/read and restart
+persistence. Trino, ingestion, and per-user query authorization remain scaffolded.
 
 ## Goal
 Shared synthetic hospital tables queried through Trino with authenticated
@@ -32,11 +33,17 @@ Keep necessary clinical identity data in a separately restricted identity table.
 5. Start private storage and initialize its bucket/service permissions:
    `docker compose --env-file data/secrets/runtime.env up -d --wait storage`, then
    `docker compose --env-file data/secrets/runtime.env run --rm storage-init`.
-   See [storage setup and checks](docker/storage/README.md). The real
-   `compose.yaml` implements storage only; `compose.yaml.example` retains the
-   complete image inventory for the remaining stack.
-6. Ingest a small Synthea sample and validate IDs/foreign keys.
-7. Implement and run permission tests before expanding tables and data size.
+   See [storage setup and checks](docker/storage/README.md).
+6. Build the private catalog tools, start the catalog and its authentication/
+   database dependencies, register the warehouse, and prove Iceberg writes/reads:
+   `docker compose --env-file data/secrets/runtime.env build catalog-init`,
+   `docker compose --env-file data/secrets/runtime.env up -d --wait catalog`,
+   `docker compose --env-file data/secrets/runtime.env run --rm --no-deps catalog-init`,
+   `docker compose --env-file data/secrets/runtime.env run --rm --no-deps catalog-check`.
+   See [catalog setup, decisions, and checks](docker/catalog/README.md).
+   `compose.yaml.example` retains the complete image inventory.
+7. Add Trino (#13), then ingest a small Synthea sample and validate IDs/foreign keys.
+8. Implement and run permission tests before expanding tables and data size.
 
 ## Build order
 - [x] Choose catalog implementation and pin service versions (ADR-001).
@@ -56,8 +63,11 @@ Append-only grants do not establish tamper evidence.
 Query logs do not prove exactly which patient records a person viewed.
 Secret-generation tests check local credentials, TLS, permissions, and reruns.
 Storage acceptance tests check anonymous denial, service S3 permissions, bootstrap
-reruns, and persistence. Storage uses HTTP on a private local Docker network;
-query authorization, end-to-end TLS, and full-stack integration are not validated yet.
+reruns, and persistence. Catalog acceptance tests check authenticated PyIceberg
+create/append/read, service grants, and unchanged data/snapshots after recreating
+the catalog, storage, and all three databases. Internal services use HTTP on a
+private local Docker network; query authorization, end-to-end TLS, and Trino
+integration are not validated yet.
 
 ## Repository map
 docker/: runtime configuration; ingest/: ETL and classification;
