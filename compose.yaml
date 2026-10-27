@@ -1,4 +1,4 @@
-# Private storage and authenticated catalog slices of ADR-001. Trino follows in #13.
+# Private storage/catalog; Trino HTTPS is the only published service.
 x-catalog-image: &catalog-image quay.io/lakekeeper/catalog:v0.14.0
 x-postgres: &postgres
   image: postgres:17.11-bookworm
@@ -267,7 +267,54 @@ services:
       catalog-init:
         condition: service_completed_successfully
 
+  trino:
+    image: trinodb/trino:476
+    # Match the owner of the host's mode-0600 secret files without running as root.
+    user: "${TRINO_UID:-1000}:${TRINO_GID:-1000}"
+    environment:
+      TRINO_INTERNAL_SHARED_SECRET: ${TRINO_INTERNAL_SHARED_SECRET:?Trino internal secret is required}
+      TRINO_OIDC_CLIENT_SECRET: ${TRINO_OIDC_CLIENT_SECRET:?Trino OIDC secret is required}
+      TRINO_STORAGE_ACCESS_KEY: ${TRINO_STORAGE_ACCESS_KEY:?Trino access key is required}
+      TRINO_STORAGE_SECRET_KEY: ${TRINO_STORAGE_SECRET_KEY:?Trino secret key is required}
+    depends_on:
+      catalog-init:
+        condition: service_completed_successfully
+    networks: [backend, frontend]
+    ports:
+      - "127.0.0.1:8443:8443"
+    volumes:
+      - ./docker/trino/config.properties:/etc/trino/config.properties:ro
+      - ./docker/trino/node.properties:/etc/trino/node.properties:ro
+      - ./docker/trino/jvm.config:/etc/trino/jvm.config:ro
+      - ./docker/trino/catalog/iceberg.properties:/etc/trino/catalog/hospital.properties:ro
+      - ./docker/trino/auth/password-authenticator.properties:/etc/trino/password-authenticator.properties:ro
+      - ./docker/trino/auth/group-provider.properties:/etc/trino/group-provider.properties:ro
+      - ./docker/trino/auth/groups.txt:/etc/trino/auth/groups.txt:ro
+      - ./docker/trino/access-control.properties:/etc/trino/access-control.properties:ro
+      - ./policies/rules.json:/etc/trino/policies/rules.json:ro
+      - ${TRINO_PASSWORD_FILE:?Trino password file is required}:/etc/trino/auth/password.db:ro
+      - ${TRINO_TLS_PEM:?Trino TLS PEM is required}:/etc/trino/auth/trino.pem:ro
+      - ${TRINO_CA_BUNDLE:?Trino CA bundle is required}:/etc/trino/auth/ca.crt:ro
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+      - /data/trino:mode=1777
+      # JNA/OSHI extracts native libraries here during JVM startup.
+      - /data/trino/native:mode=1777,exec
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    healthcheck:
+      # The listener opens before authenticators load; wait for starting=false.
+      test: ["CMD-SHELL", "curl --fail --silent --cacert /etc/trino/auth/ca.crt https://localhost:8443/v1/info | grep -q '\"starting\"[[:space:]]*:[[:space:]]*false'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
 networks:
+  # Only the query boundary joins this network, enabling its loopback publication.
+  frontend: {}
   backend:
     internal: true
 

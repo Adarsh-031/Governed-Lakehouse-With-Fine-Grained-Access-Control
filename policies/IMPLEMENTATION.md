@@ -3,13 +3,17 @@
 
 The supplied rules.json intentionally grants no data access. It is a starting
 deny configuration, not a completed or universally deny-all Trino policy.
-Validate its schema against Trino 476 before deployment; see
+Trino 476 loads it through the system file access control, and the Iceberg
+connector uses `iceberg.security=SYSTEM`. Issue #13's acceptance test checks
+the no-data-access baseline and applies a separate synthetic test policy to
+prove row filtering, column masking, group resolution, and impersonation denial.
+This does not implement or validate the clinical permission matrix. See
 [ADR-001](../docs/architecture.md#version-specific-implementation-contract)
 for the release-specific policy reference.
 Explicitly review every operation category, including functions, procedures,
 session properties, system information, authorization, and metadata visibility.
 
-1. Bind authenticated identities to server-managed groups; deny impersonation.
+1. Keep authenticated identities bound to server-managed groups and deny impersonation.
 2. Permit only approved catalogs/schemas/tables and SELECT operations.
 3. Protect care_team from edits and unintended enumeration.
 4. Apply doctor filters to every patient-bearing table, not just patients.

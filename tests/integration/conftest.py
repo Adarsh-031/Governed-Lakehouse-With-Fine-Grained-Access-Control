@@ -2,28 +2,50 @@
 
 import os
 import secrets
+import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
+
+from scripts.init_secrets import initialize
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture
 def compose(tmp_path):
-    names = [
-        line.split("=", 1)[0]
-        for line in (ROOT / ".env.example").read_text().splitlines()
+    directory = tmp_path / "secrets"
+    previous_umask = os.umask(0o077)
+    try:
+        initialize(directory)
+    finally:
+        os.umask(previous_umask)
+    env_file = directory / "runtime.env"
+    values = dict(
+        line.split("=", 1)
+        for line in env_file.read_text().splitlines()
         if line and not line.startswith("#")
-    ]
-    values = {name: secrets.token_hex(32) for name in names}
-    values["STORAGE_ROOT_USER"] = "test_storage_admin"
-    for service in ("ETL", "TRINO", "AUDIT_WRITER"):
-        values[f"{service}_STORAGE_ACCESS_KEY"] = secrets.token_hex(10).upper()
-    env_file = tmp_path / "runtime.env"
-    env_file.touch(mode=0o600)
+    )
+    for variable, name in (
+        ("TRINO_TLS_PEM", "trino.pem"),
+        ("TRINO_PASSWORD_FILE", "password.db"),
+        ("TRINO_CA_BUNDLE", "ca.crt"),
+    ):
+        values[variable] = str(directory / name)
     env_file.write_text("".join(f"{key}={value}\n" for key, value in values.items()))
+    policy = tmp_path / "rules.json"
+    shutil.copyfile(ROOT / "policies/rules.json", policy)
+    policy.chmod(0o644)  # Contains no credentials; readable by the container UID.
+    override = tmp_path / "compose.test.yaml"
+    override.write_text(
+        "services:\n  trino:\n"
+        f'    user: "{os.getuid()}:{os.getgid()}"\n'
+        "    ports: !override\n"
+        '      - "127.0.0.1::8443"\n'
+        "    volumes:\n"
+        f"      - {policy}:/etc/trino/policies/rules.json:ro\n"
+    )
     command = [
         "docker",
         "compose",
@@ -31,29 +53,49 @@ def compose(tmp_path):
         f"lakehouse-test-{secrets.token_hex(6)}",
         "--file",
         str(ROOT / "compose.yaml"),
+        "--file",
+        str(override),
         "--env-file",
         str(env_file),
     ]
     environment = {key: value for key, value in os.environ.items() if key not in values}
 
-    def run(*args, expect_success=True):
+    def run(*args, expect_success=True, input_text=None):
         result = subprocess.run(
             [*command, *args],
             check=False,
             capture_output=True,
             text=True,
+            input=input_text,
             timeout=360,
             env=environment,
         )
         output = result.stdout + result.stderr
-        for value in values.values():
-            output = output.replace(value, "<redacted>")
+        if expect_success and result.returncode != 0:
+            diagnostics = subprocess.run(
+                [*command, "logs", "--no-color", "--tail", "80", "trino"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                env=environment,
+            )
+            output += diagnostics.stdout + diagnostics.stderr
+        for name, value in values.items():
+            if name.startswith("TRINO_PASSWORD_") or name.endswith(
+                ("_PASSWORD", "_SECRET", "_SECRET_KEY", "_ACCESS_KEY", "_KEY", "_TOKEN")
+            ):
+                output = output.replace(value, "<redacted>")
         if expect_success:
-            assert result.returncode == 0, output
+            if result.returncode != 0:
+                pytest.fail(output, pytrace=False)
         else:
             assert result.returncode != 0, "An operation expected to fail succeeded."
         return output
 
+    run.values = values
+    run.policy = policy
+    run.ca = directory / "ca.crt"
     try:
         yield run
     finally:
