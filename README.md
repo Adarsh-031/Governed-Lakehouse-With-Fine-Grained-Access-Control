@@ -1,7 +1,9 @@
 
 # Governed Hospital Lakehouse
 
-Status: repository scaffold, not a running or security-validated platform.
+Status: private object storage and an authenticated Lakekeeper/Postgres catalog
+are runnable, with Docker acceptance tests for PyIceberg create/read and restart
+persistence. Trino, ingestion, and per-user query authorization remain scaffolded.
 
 ## Goal
 Shared synthetic hospital tables queried through Trino with authenticated
@@ -22,13 +24,26 @@ Keep necessary clinical identity data in a separately restricted identity table.
 ## Local development
 1. Install uv separately if needed, then run `uv sync --group dev`.
 2. Commit the resulting uv.lock after reviewing resolved dependencies.
-3. Copy .env.example to .env and generate secrets locally; never commit them.
+3. With Bash and OpenSSL installed, run `./scripts/init_secrets.sh` to generate
+   all local credentials and TLS files under `data/secrets/`. Repeating the
+   command preserves existing secrets. See [secret setup](scripts/README.md)
+   for output files, loading variables, and explicit rotation.
 4. Use the service image pins and catalog decision in
    [ADR-001](docs/architecture.md#adr-001-rest-catalog-and-service-versions).
-5. Implement compose.yaml from compose.yaml.example, TLS, credentials, networks,
-   health checks, and policies. The example is intentionally not runnable.
-6. Ingest a small Synthea sample and validate IDs/foreign keys.
-7. Implement and run permission tests before expanding tables and data size.
+5. Start private storage and initialize its bucket/service permissions:
+   `docker compose --env-file data/secrets/runtime.env up -d --wait storage`, then
+   `docker compose --env-file data/secrets/runtime.env run --rm storage-init`.
+   See [storage setup and checks](docker/storage/README.md).
+6. Build the private catalog tools, start the catalog and its authentication/
+   database dependencies, register the warehouse, and prove Iceberg writes/reads:
+   `docker compose --env-file data/secrets/runtime.env build catalog-init`,
+   `docker compose --env-file data/secrets/runtime.env up -d --wait catalog`,
+   `docker compose --env-file data/secrets/runtime.env run --rm --no-deps catalog-init`,
+   `docker compose --env-file data/secrets/runtime.env run --rm --no-deps catalog-check`.
+   See [catalog setup, decisions, and checks](docker/catalog/README.md).
+   `compose.yaml.example` retains the complete image inventory.
+7. Add Trino (#13), then ingest a small Synthea sample and validate IDs/foreign keys.
+8. Implement and run permission tests before expanding tables and data size.
 
 ## Build order
 - [x] Choose catalog implementation and pin service versions (ADR-001).
@@ -46,7 +61,13 @@ HMAC is pseudonymization, not reversible encryption or anonymization.
 Generalization does not establish k-anonymity without measurement.
 Append-only grants do not establish tamper evidence.
 Query logs do not prove exactly which patient records a person viewed.
-No automated security tests or infrastructure integration are implemented yet.
+Secret-generation tests check local credentials, TLS, permissions, and reruns.
+Storage acceptance tests check anonymous denial, service S3 permissions, bootstrap
+reruns, and persistence. Catalog acceptance tests check authenticated PyIceberg
+create/append/read, service grants, and unchanged data/snapshots after recreating
+the catalog, storage, and all three databases. Internal services use HTTP on a
+private local Docker network; query authorization, end-to-end TLS, and Trino
+integration are not validated yet.
 
 ## Repository map
 docker/: runtime configuration; ingest/: ETL and classification;

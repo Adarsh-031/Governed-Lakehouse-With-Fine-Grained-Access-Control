@@ -16,5 +16,8 @@ docker/trino/auth/password.db
 data/**
 !data/**/
 !data/**/README.md
+# Ignore every secret artifact, including nested README.md files.
+data/secrets/**
+!data/secrets/README.md
 results/raw/**
 !results/raw/README.md
