@@ -5,6 +5,9 @@ Trino HTTP events -> authenticated collector -> durable restricted spool ->
 deduplicated batch writer -> access-controlled Iceberg audit table.
 
 Enable query-created and query-completed events. Configure bounded retries.
+Target Trino 476's bundled HTTP event listener; the exact property and event-SPI
+references are in [ADR-001](../docs/architecture.md#version-specific-implementation-contract).
+The event contract is a proposed normalized schema, not the native 476 payload.
 Acknowledge only after durable persistence. Test outage/restart behavior and
 measure missing events by reconciling known query IDs. Do not claim losslessness
 without demonstrated delivery guarantees.
