@@ -122,4 +122,67 @@ secured stack, create/write/read a small Iceberg v2 table through the REST catal
 recreate containers while preserving volumes, and verify the table remains
 readable. Then test identity isolation, row filters/masks, and created/completed
 audit delivery. Record the versions/digests and results; rerun these checks when
-changing a pin. None of these runtime/security checks has been performed yet.
+changing a pin. The storage-only checks below are implemented; these full-stack
+runtime/security checks have not been performed yet.
+
+## ADR-002: Private warehouse bootstrap and service storage permissions
+
+Date: 2026-10-27. Status: accepted for the local storage slice.
+Addresses [issue #11](https://github.com/Adarsh-031/Governed-Lakehouse-With-Fine-Grained-Access-Control/issues/11).
+
+Use ADR-001's pinned Silo distribution rather than changing the selected server
+to upstream MinIO. `compose.yaml` attaches storage and its one-shot init/check
+containers only to an `internal: true` backend network, with no published ports
+and with the browser disabled. A named `warehouse` volume persists objects and
+IAM state. Readiness uses the bundled curl and the server's readiness endpoint;
+initialization waits for readiness rather than sleeping a fixed interval.
+
+Create one private `warehouse` bucket and three distinct built-in IAM users from
+issue #4's generated S3 keys. Keep root credentials in storage and the privileged,
+short-lived bootstrap/check jobs; future ETL, Trino, and audit containers receive
+only their own key pair. Do not mount the complete host env file into containers.
+Reusing the pinned image's bundled `mc` avoids an additional helper-image pin.
+
+Choose prefix isolation within the bucket to give each writer a separate domain:
+
+- ETL can list/read/write/delete `bronze/`, `silver/`, `gold/`, and `identity/`.
+  Deletion supports ingestion retries and Iceberg object cleanup. ETL is a trusted
+  data-provisioning path and cannot access `audit/`.
+- Trino can list/read only `silver/` and `gold/`. Query consumers need no raw
+  exports, identity store, audit records, or S3 mutation rights. An eventual
+  identity/audit query requirement needs an explicit policy review.
+- The audit writer can list/read/write `audit/`, including metadata required for
+  Iceberg commits, but cannot delete objects or access clinical prefixes.
+- Each service can discover the bucket region. Lists require an allowed prefix;
+  bucket-root enumeration, other prefixes/buckets, bucket creation, anonymous
+  policy changes, and administrative APIs receive no grants. Multipart abort
+  and part-list operations are confined to writable object prefixes.
+
+The alternative of attaching a built-in bucket-wide readwrite policy is smaller
+but would let ETL modify audit data and let the query engine change clinical
+objects. Separate buckets would also isolate writers, but prefix policies retain
+the single warehouse-bucket contract in issue #11. Future catalog/table locations
+must stay under these approved roots; do not relax policies to accommodate random
+locations or catalog-wide credentials without reviewing the boundary.
+
+Initialization is rerunnable: preserve the bucket and objects, remove anonymous
+access, reapply the named policies and supplied credentials, and refuse unexpected
+extra direct policies or group memberships. It does not delete old IAM identities
+when an access ID changes; revoke the previous key explicitly during coordinated
+rotation. Clients must wait for successful `storage-init` completion, not merely
+for storage health.
+
+This is a local single-node experiment using HTTP inside the isolated Docker
+network. Host/Docker administrators remain trusted and can inspect container
+environments or the volume. Add storage TLS before extending this boundary beyond
+the local host. No-delete audit permissions do not prevent overwriting existing
+keys and are not immutability or tamper evidence. Audit retention/maintenance must
+use a separately reviewed path; routine audit object deletion is deliberately
+unavailable to its writer.
+
+The opt-in acceptance test in `tests/integration/test_storage.py` checks readiness,
+network configuration, anonymous bucket/object denial, allowed and forbidden
+service operations, bootstrap reruns and privilege drift, and object/IAM survival
+after container recreation. It uses an isolated Compose project and temporary
+credentials and removes only its own resources. This verifies storage behavior;
+it does not establish Iceberg/REST interoperability or per-user Trino enforcement.

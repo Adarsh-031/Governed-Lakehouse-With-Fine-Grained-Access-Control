@@ -1,0 +1,73 @@
+# Storage slice of ADR-001. Catalog, Trino and audit services follow separately.
+x-storage-image: &storage-image pgsty/silo:RELEASE.2026-09-03T13-18-01Z
+x-bootstrap-environment: &bootstrap-environment
+  STORAGE_ROOT_USER: ${STORAGE_ROOT_USER:?Run scripts/init_secrets.sh and pass --env-file data/secrets/runtime.env}
+  STORAGE_ROOT_PASSWORD: ${STORAGE_ROOT_PASSWORD:?Storage root password is required}
+  ETL_STORAGE_ACCESS_KEY: ${ETL_STORAGE_ACCESS_KEY:?ETL access key is required}
+  ETL_STORAGE_SECRET_KEY: ${ETL_STORAGE_SECRET_KEY:?ETL secret key is required}
+  TRINO_STORAGE_ACCESS_KEY: ${TRINO_STORAGE_ACCESS_KEY:?Trino access key is required}
+  TRINO_STORAGE_SECRET_KEY: ${TRINO_STORAGE_SECRET_KEY:?Trino secret key is required}
+  AUDIT_WRITER_STORAGE_ACCESS_KEY: ${AUDIT_WRITER_STORAGE_ACCESS_KEY:?Audit access key is required}
+  AUDIT_WRITER_STORAGE_SECRET_KEY: ${AUDIT_WRITER_STORAGE_SECRET_KEY:?Audit secret key is required}
+x-bootstrap: &bootstrap
+  image: *storage-image
+  entrypoint: ["/bin/sh"]
+  environment: *bootstrap-environment
+  networks: [backend]
+  read_only: true
+  tmpfs:
+    - /tmp:mode=1777
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  volumes:
+    - ./docker/storage:/bootstrap:ro
+
+services:
+  storage:
+    image: *storage-image
+    command: ["server", "/data", "--address", ":9000"]
+    environment:
+      MINIO_ROOT_USER: ${STORAGE_ROOT_USER:?Storage root user is required}
+      MINIO_ROOT_PASSWORD: ${STORAGE_ROOT_PASSWORD:?Storage root password is required}
+      MINIO_BROWSER: "off"
+      MINIO_REGION_NAME: us-east-1
+    # No host ports and no connection to the default/public network.
+    networks: [backend]
+    volumes:
+      - warehouse:/data
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:9000/minio/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
+  storage-init:
+    <<: *bootstrap
+    command: ["/bootstrap/init.sh"]
+    depends_on:
+      storage:
+        condition: service_healthy
+    restart: "no"
+
+  storage-check:
+    <<: *bootstrap
+    profiles: [test]
+    command: ["/bootstrap/check.sh"]
+    depends_on:
+      storage-init:
+        condition: service_completed_successfully
+    restart: "no"
+
+networks:
+  backend:
+    internal: true
+
+volumes:
+  warehouse: {}
