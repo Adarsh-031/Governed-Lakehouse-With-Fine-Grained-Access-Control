@@ -2,8 +2,9 @@
 
 import re
 
-from ingest.tokenization import patient_token
 import pytest
+
+from ingest.tokenization import patient_token
 
 
 KEY = b"a" * 32

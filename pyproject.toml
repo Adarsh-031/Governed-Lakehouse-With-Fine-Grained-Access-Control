@@ -1,4 +1,3 @@
-
 [project]
 name = "governed-lakehouse-with-fine-grained-access-control"
 version = "0.1.0"
@@ -29,3 +28,6 @@ pythonpath = ["."]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint.isort]
+known-first-party = ["ingest"]
