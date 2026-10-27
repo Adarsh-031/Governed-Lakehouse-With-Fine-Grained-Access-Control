@@ -37,6 +37,11 @@ jobs:
       - name: Install locked dependencies
         run: uv sync --locked --group dev --python 3.11
 
+      - name: Diagnose and normalize tokenization test imports
+        run: |
+          uv run --no-sync ruff check --fix tests/unit/test_tokenization.py
+          git diff -- tests/unit/test_tokenization.py
+
       - name: Check Python lint
         run: uv run --no-sync ruff check .
 
