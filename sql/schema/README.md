@@ -28,7 +28,10 @@ the acceptance test, provision a separately trusted SQL execution path with:
 - SQL schema/table creation permissions confined to this provisioning path;
   identity must remain unavailable to every MVP interactive SQL group.
 
-Warehouse registration and trusted production provisioning are separate work.
+The trusted PyIceberg [ingestion path](../../ingest/README.md#synthea-to-silver-issue-16)
+now creates/validates patients, encounters and claims directly using ETL authority;
+it does not execute these SQL files or register the identity warehouse.
+Other warehouse registration and trusted SQL provisioning are separate work.
 The DDL omits explicit locations so Lakekeeper assigns paths inside each
 warehouse's storage boundary. Creating a schema/table name is not an access grant.
 Clinical policies remain issue #18; do not expose loaded data before those checks.

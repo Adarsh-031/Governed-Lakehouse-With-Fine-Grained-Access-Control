@@ -267,6 +267,22 @@ services:
       catalog-init:
         condition: service_completed_successfully
 
+  ingest:
+    <<: *catalog-client
+    profiles: [etl]
+    command: ["-m", "ingest.pipeline"]
+    environment:
+      ETL_OIDC_CLIENT_SECRET: ${ETL_OIDC_CLIENT_SECRET:?ETL OIDC secret is required}
+      ETL_STORAGE_ACCESS_KEY: ${ETL_STORAGE_ACCESS_KEY:?ETL access key is required}
+      ETL_STORAGE_SECRET_KEY: ${ETL_STORAGE_SECRET_KEY:?ETL secret key is required}
+      HMAC_KEY_HEX: ${HMAC_KEY_HEX:?HMAC key is required}
+      HMAC_KEY_VERSION: ${HMAC_KEY_VERSION:?HMAC key version is required}
+    volumes:
+      - ${INGEST_SOURCE_DIR:-./data/raw/synthea/1000-seed42}:/source:ro
+    depends_on:
+      catalog-init:
+        condition: service_completed_successfully
+
   trino:
     image: trinodb/trino:476
     # Match the owner of the host's mode-0600 secret files without running as root.
