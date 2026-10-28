@@ -6,7 +6,8 @@ are runnable alongside Trino 476 with HTTPS password login and system file
 authorization. Docker acceptance tests cover Iceberg create/read, persistence,
 and synthetic row-filter/mask enforcement. Reproducible Synthea CSV generation
 and public MIMIC-IV demo acquisition are available; Iceberg ingestion and clinical
-policies remain to be implemented.
+policies remain to be implemented. Silver and restricted identity DDL is available
+with isolated Trino/Iceberg acceptance coverage; see [schema setup](sql/schema/README.md).
 
 ## Goal
 Shared synthetic hospital tables queried through Trino with authenticated
