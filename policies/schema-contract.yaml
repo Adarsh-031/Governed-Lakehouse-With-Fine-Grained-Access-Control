@@ -1,0 +1,66 @@
+# Proposed MVP inventory for #5; not executable DDL or Trino policy.
+# Adding a column requires four explicit access-matrix.csv decisions.
+version: 1
+tables:
+  patients:
+    resource: hospital.silver.patients
+    columns:
+      patient_token: VARCHAR
+      birthdate: DATE
+      age_band: VARCHAR
+      sex: VARCHAR
+      race: VARCHAR
+      ethnicity: VARCHAR
+      zip: VARCHAR
+  encounters:
+    resource: hospital.silver.encounters
+    columns:
+      encounter_id: VARCHAR
+      patient_token: VARCHAR
+      start_time: TIMESTAMP(6)
+      stop_time: TIMESTAMP(6)
+      encounter_class: VARCHAR
+      code: VARCHAR
+      description: VARCHAR
+      reason_code: VARCHAR
+      reason_description: VARCHAR
+  claims:
+    resource: hospital.silver.claims
+    columns:
+      claim_id: VARCHAR
+      patient_token: VARCHAR
+      encounter_id: VARCHAR
+      payer: VARCHAR
+      procedure_code: VARCHAR
+      procedure_description: VARCHAR
+      total_cost: DECIMAL(18,2)
+      payer_coverage: DECIMAL(18,2)
+  care_team:
+    resource: hospital.silver.care_team
+    columns:
+      doctor_user: VARCHAR
+      patient_token: VARCHAR
+      valid_from: DATE
+      valid_to: DATE
+  identity:
+    resource: identity.identity.patient_identity
+    columns:
+      patient_token: VARCHAR
+      name: VARCHAR
+  audit:
+    resource: audit.audit.query_events
+    columns:
+      query_id: VARCHAR
+      event_type: VARCHAR
+      authenticated_user: VARCHAR
+      groups: ARRAY(VARCHAR)
+      query_text_restricted: VARCHAR
+      tables: ARRAY(VARCHAR)
+      columns: ARRAY(VARCHAR)
+      output_rows_if_available: BIGINT
+      status: VARCHAR
+      error_code: VARCHAR
+      event_timestamp: TIMESTAMP(6)
+      received_timestamp: TIMESTAMP(6)
+      policy_version: VARCHAR
+      policy_digest: VARCHAR

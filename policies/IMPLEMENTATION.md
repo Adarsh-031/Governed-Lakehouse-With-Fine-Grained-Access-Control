@@ -1,6 +1,12 @@
 
 # Policy implementation gate
 
+The exact target permissions are in [access-matrix.csv](access-matrix.csv),
+with semantics, row predicates, mask examples, and decision reasons in
+[README.md](README.md). [schema-contract.yaml](schema-contract.yaml) supplies
+the proposed MVP column inventory/types. Issue #5 defines this contract; #18
+implements it after schema/ingestion work. Teammate sign-off remains pending.
+
 The supplied rules.json intentionally grants no data access. It is a starting
 deny configuration, not a completed or universally deny-all Trino policy.
 Trino 476 loads it through the system file access control, and the Iceberg
@@ -22,3 +28,9 @@ session properties, system information, authorization, and metadata visibility.
 7. Generate rules from pii_tags.yaml only through an explicit validated compiler.
 8. Verify base tables, views, time travel, metadata, and alternative clients.
 9. Version the policy and record its digest with each experiment.
+10. Preserve caller identity inside privileged care_team filter evaluation;
+    enforce UTC half-open assignment dates on patients and encounters.
+11. Reject unreviewed multi-role memberships and unknown resources/columns.
+12. Keep identity denied to every MVP SQL role. Audit metadata SELECT for admin
+    needs a future separately reviewed read path; never expose restricted SQL
+    text or silently widen the current clinical storage/catalog credentials.
