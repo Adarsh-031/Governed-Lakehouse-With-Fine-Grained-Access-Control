@@ -2,6 +2,28 @@
 
 Setup, ingestion, policy validation, tests, and benchmark orchestration.
 
+## Acquire reproducible source data (issue #3)
+
+`./scripts/generate_synthea.sh --patients 1000 --seed 42` generates a pinned
+Synthea 3.4.0 CSV sample; use `--patients 10000` or `--patients 100000` for scale.
+Requires Bash, Python 3.11+, Java 17+, and HTTPS for the first JAR download.
+`--java /path/to/bin/java` selects Java without changing your system runtime.
+The seed, provider seed, UTC simulation date, configuration and single worker
+are fixed. Only the seven MVP source CSVs are retained.
+
+`./scripts/download_mimic_demo.sh` downloads only the public MIMIC-IV Clinical
+Database Demo 2.2 subset, validates upstream checksums and patient/admission
+references, and preserves the license/README. It requires Bash, Python 3.11+
+and HTTPS, with no credentials or Python packages.
+
+Both commands work from any working directory and stage before publishing.
+Rerunning verifies matching counts and preserves the original sample. Conflicting
+settings or modified CSVs fail; use `--output` for a new destination. CSVs and
+manifests live under git-ignored `data/raw/`, with separate source directories.
+The [data card](../docs/data-card.md) contains full reproduction instructions,
+measured counts, license/citation details, and the bronze-to-silver boundary.
+Run offline checks with `uv run --locked --group dev pytest tests/unit/test_source_data.py`.
+
 ## Initialize local secrets
 
 Prerequisites: Bash, uv, Python 3.11+ (managed by uv), and OpenSSL 1.1.1+.
