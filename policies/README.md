@@ -7,6 +7,11 @@ and SQL types for DDL (#15), classification (#6), ingestion (#16/#17), policy
 (#18), and access tests. Neither file is executed by Trino. The deployed
 [rules.json](rules.json) still grants no data access.
 
+[pii_tags.yaml](../ingest/pii_tags.yaml) classifies every inventory column and
+records storage and per-role treatments that must match this matrix. See the
+[classification contract](../ingest/README.md#column-classification-contract-issue-6)
+for treatment semantics, decisions, and CI checks.
+
 This contract covers synthetic data only. New columns, tables, cohorts, roles,
 and warehouses require review; unlisted resources/operations receive no grants.
 
