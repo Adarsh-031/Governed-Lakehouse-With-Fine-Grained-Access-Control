@@ -6,5 +6,7 @@ ENV UV_PYTHON_DOWNLOADS=never UV_LINK_MODE=copy PYTHONDONTWRITEBYTECODE=1
 COPY pyproject.toml uv.lock ./
 RUN uv sync --locked --no-dev --no-editable --python /usr/local/bin/python
 COPY docker/catalog/*.py ./
+COPY ingest ./ingest
+COPY scripts/source_data.py ./scripts/source_data.py
 USER 10001:10001
 ENTRYPOINT ["/app/.venv/bin/python"]

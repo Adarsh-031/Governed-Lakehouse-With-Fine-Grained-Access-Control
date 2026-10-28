@@ -17,7 +17,7 @@ concurrency:
 jobs:
   quality:
     name: Code and configuration checks
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 15
 
     steps:
@@ -99,3 +99,8 @@ jobs:
         env:
           RUN_SCHEMA_INTEGRATION: "1"
         run: uv run --no-sync pytest tests/integration/test_silver_schema.py -v --strict-config
+
+      - name: Verify trusted ETL ingestion and safe reruns on Iceberg
+        env:
+          RUN_INGEST_INTEGRATION: "1"
+        run: uv run --no-sync pytest tests/integration/test_ingestion.py -v --strict-config

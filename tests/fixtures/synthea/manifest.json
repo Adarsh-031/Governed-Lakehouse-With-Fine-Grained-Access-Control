@@ -1,0 +1,73 @@
+{
+  "parameters": {
+    "source": "synthea",
+    "version": "3.4.0",
+    "population": 2,
+    "reference_date": "20250101"
+  },
+  "tables": {
+    "claims.csv": {
+      "rows": 1,
+      "columns": [
+        "Id",
+        "PATIENTID",
+        "APPOINTMENTID",
+        "PRIMARYPATIENTINSURANCEID",
+        "SECONDARYPATIENTINSURANCEID"
+      ],
+      "sha256": "5b079fd97f2c0539cb54f73be1bfdc0a8c20f8eeeab201ea8a4f6a03274064b6"
+    },
+    "claims_transactions.csv": {
+      "rows": 9,
+      "columns": [
+        "ID",
+        "CLAIMID",
+        "CHARGEID",
+        "PATIENTID",
+        "APPOINTMENTID",
+        "TYPE",
+        "AMOUNT",
+        "METHOD",
+        "PROCEDURECODE",
+        "NOTES",
+        "PAYMENTS"
+      ],
+      "sha256": "dbffb381ff4c4fa27b88af23f7ba013cd0eba5a688c900ac5e7fdc25ee7aa586"
+    },
+    "encounters.csv": {
+      "rows": 2,
+      "columns": [
+        "Id",
+        "PATIENT",
+        "START",
+        "STOP",
+        "ENCOUNTERCLASS",
+        "CODE",
+        "DESCRIPTION",
+        "REASONCODE",
+        "REASONDESCRIPTION"
+      ],
+      "sha256": "9615762a97686805bae9b8022dea60ade4a9bee7233a3a9b7005a16084bfd09f"
+    },
+    "patients.csv": {
+      "rows": 2,
+      "columns": [
+        "Id",
+        "BIRTHDATE",
+        "GENDER",
+        "RACE",
+        "ETHNICITY",
+        "ZIP"
+      ],
+      "sha256": "1fa2269bfcf51a893d95624817a69388ec775d8ca29e95944a8d7a427a90e3c9"
+    },
+    "payers.csv": {
+      "rows": 2,
+      "columns": [
+        "Id",
+        "NAME"
+      ],
+      "sha256": "7e7cf9ae058c5cdd74b3c6934c8849973720afe06462d46c9c7e46f7066d9ba8"
+    }
+  }
+}

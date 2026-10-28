@@ -159,3 +159,32 @@ cannot be treated as ordinary birthdates or calendar-comparable dates across
 patients. A 100-person demo cannot support representative clinical conclusions
 or substitute for Synthea scale benchmarks. Synthetic data and deidentification
 also do not prove that future HMAC/generalization policies provide anonymity.
+
+## Silver ingestion evidence (issue #16)
+
+On **2026-10-28**, the generated 1k seed-42 sample passed the isolated Docker
+ETL acceptance test against pinned Lakekeeper/Silo with fresh service credentials
+and disposable volumes. The one-command Compose ETL dependency path loaded and
+read back every value from 1,000 patients, 48,976 encounters, and **203,698 charge
+lines**, representing all **83,829 native claims headers**. Source patient and
+encounter counts matched exactly, and charge counts matched the source CHARGE
+records. Patient tokens were consistent across all three tables; validated
+patient and encounter orphan counts were zero.
+
+The fixed `age_reference_date` was **2025-01-01**, taken from the source manifest.
+Token version was **v1**, with the source patient ID domain `synthea:`. The test
+used an ephemeral random HMAC key, never recorded in this evidence or Git.
+An identical rerun verified all existing values without appending; a token-version
+change was rejected before table writes. The tests deleted only their own stack
+and volumes, so this evidence does not mean a persistent developer warehouse was
+populated. Run `./scripts/ingest.sh` to load that warehouse.
+
+Claims use charge-level `ID` as `claim_id`, retain exact procedure codes and
+DECIMAL(18,2) costs, resolve the primary payer name, and sum insurance payments
+(primary plus secondary) for coverage. Copays, patient payments, transfers and
+adjustments are not extra charges or payer coverage. The single primary-payer
+label does not identify every insurer contributing to coverage. See the
+[mapping and retry decisions](../ingest/README.md#claims-grain-charge-lines-not-headers).
+No names/SSNs enter the shared patient inventory. Care-team/identity loading,
+clinical SQL policies, MIMIC transformation, and larger-population memory/scale
+measurements remain separate work.

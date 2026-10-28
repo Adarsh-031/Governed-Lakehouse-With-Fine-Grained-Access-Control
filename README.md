@@ -5,8 +5,8 @@ Status: private object storage and an authenticated Lakekeeper/Postgres catalog
 are runnable alongside Trino 476 with HTTPS password login and system file
 authorization. Docker acceptance tests cover Iceberg create/read, persistence,
 and synthetic row-filter/mask enforcement. Reproducible Synthea CSV generation
-and public MIMIC-IV demo acquisition are available; Iceberg ingestion and clinical
-policies remain to be implemented. Silver and restricted identity DDL is available
+and public MIMIC-IV demo acquisition are available. Synthea-to-silver Iceberg
+ingestion is runnable; clinical policies remain to be implemented. Silver and restricted identity DDL is available
 with isolated Trino/Iceberg acceptance coverage; see [schema setup](sql/schema/README.md).
 
 ## Goal
@@ -53,14 +53,16 @@ Keep necessary clinical identity data in a separately restricted identity table.
    Generate raw sources with `./scripts/generate_synthea.sh --patients 1000 --seed 42`
    (Java 17+), and optionally `./scripts/download_mimic_demo.sh` for the separate
    public clinical demo. See the [data card](docs/data-card.md) for reproduction,
-   measured row counts, and larger populations. Iceberg loading remains future work.
+   measured row counts, and larger populations. Load the sample with
+   `./scripts/ingest.sh`; see the [ingestion mapping and checks](ingest/README.md#synthea-to-silver-issue-16).
 8. Implement and run permission tests before expanding tables and data size.
 
 ## Build order
 - [x] Choose catalog implementation and pin service versions (ADR-001).
 - [x] Bring up private storage/catalog and authenticated Trino over TLS.
 - [x] Generate a reproducible 1k Synthea source sample and acquire the public MIMIC-IV demo.
-- [ ] Load patients, encounters, claims, and care_team.
+- [x] Load and validate patients, encounters, and charge-level claims.
+- [ ] Generate and load care_team assignments and restricted identity (#17).
 - [ ] Restrict identities; implement doctor filters and researcher/billing masks.
 - [ ] Implement durable audit collection and query-ID reconciliation.
 - [ ] Implement positive access and negative bypass tests.

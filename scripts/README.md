@@ -120,3 +120,14 @@ git status --short --untracked-files=all
 git check-ignore data/secrets/runtime.env data/secrets/password.db data/secrets/trino.pem
 uv run --locked --group dev pytest tests/unit -v
 ```
+
+## Load the silver tables (issue #16)
+
+After `./scripts/init_secrets.sh` and Synthea generation, run `./scripts/ingest.sh`.
+This builds and runs the trusted ETL container on the private backend and starts
+its dependencies. The final JSON report verifies counts, referential integrity
+and exact Iceberg readback. An identical rerun verifies existing rows; changed
+data requires an explicit migration. Use `--validate-only` for source checks,
+`INGEST_SOURCE_DIR` for another absolute source directory, and
+`LAKEHOUSE_ENV_FILE` for another Compose env file. See the
+[ingestion mapping, decisions and retry limits](../ingest/README.md#synthea-to-silver-issue-16).
