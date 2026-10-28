@@ -92,4 +92,10 @@ jobs:
         run: uv run --no-sync pytest tests/integration/test_trino.py -v --strict-config
 
       - name: Run unit tests
+        # Includes the schema/classification/access-contract drift checks.
         run: uv run --no-sync pytest tests/unit -v --strict-config --strict-markers --junitxml=unit-test-results.xml
+
+      - name: Verify silver and restricted identity DDL on Trino and Iceberg
+        env:
+          RUN_SCHEMA_INTEGRATION: "1"
+        run: uv run --no-sync pytest tests/integration/test_silver_schema.py -v --strict-config

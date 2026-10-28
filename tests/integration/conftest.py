@@ -95,6 +95,7 @@ def compose(tmp_path):
 
     run.values = values
     run.policy = policy
+    run.override_file = override
     run.ca = directory / "ca.crt"
     try:
         yield run
