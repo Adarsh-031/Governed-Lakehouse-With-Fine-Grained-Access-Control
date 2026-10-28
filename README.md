@@ -79,9 +79,14 @@ clinical rules and audit delivery remain unverified. Internal services use HTTP
 on a private local Docker network; TLS currently covers client-to-Trino and
 Trino's single-node internal communication.
 
+Issue #5's [access contract](policies/README.md) now specifies every MVP
+role/table/column decision, row scope, and mask output against an explicit
+column inventory. Contract checks run in the unit suite; teammate sign-off is
+pending. This defines the target for #18 and does not enable clinical grants.
+
 ## Repository map
 docker/: runtime configuration; ingest/: ETL and classification;
-policies/: reviewed access matrix and rules; audit/: collection contract;
+policies/: access contract and policy implementation gate; audit/: collection contract;
 sql/: schemas, views, workloads; tests/: access and bypass checks;
 bench/: experiment plan; notebooks/: analysis; dashboard/: optional demo;
 docs/: submission documents; scripts/: orchestration; results/: evidence.
