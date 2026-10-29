@@ -67,6 +67,11 @@ Keep necessary clinical identity data in a separately restricted identity table.
    Verify the independent oracle with `RUN_ACCESS_INTEGRATION=1 uv run --locked
    --group dev pytest tests/access -v`; see [access acceptance](tests/access/README.md)
    and [issue #19 decisions](docs/issue-19.md).
+   Run the bypass investigation with `RUN_BYPASS_INTEGRATION=1 uv run --locked
+   --group dev pytest tests/bypass -v`; see [suite and evidence](tests/bypass/README.md)
+   and [findings and decisions](docs/bypass-report.md). Residual researcher privacy
+   risks are measured separately from authorization failures; audit outage
+   reconciliation remains dependent on #21.
 
 ## Build order
 - [x] Choose catalog implementation and pin service versions (ADR-001).
@@ -77,7 +82,7 @@ Keep necessary clinical identity data in a separately restricted identity table.
 - [x] Restrict identities; implement doctor filters and researcher masks/billing projections (#18).
 - [ ] Implement durable audit collection and query-ID reconciliation.
 - [x] Verify authenticated access with independent doctor/mask oracles (#19).
-- [ ] Complete the broader bypass investigation and report.
+- [x] Automate all bypass cases and report findings/reasons (#23); audit outage awaits #21.
 - [ ] Run scale and equivalent-output policy-overhead benchmarks.
 - [ ] Produce notebook, data card, threat model, bypass report, 3-5 page report.
 - [ ] Record 3-minute demo and prepare 8-10 minute presentation.

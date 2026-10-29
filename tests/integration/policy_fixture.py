@@ -126,6 +126,12 @@ def main():
     data_path.write_text(json.dumps(data_oracle, default=str))
     data_path.chmod(0o600)
     clinical = etl_catalog()
+    # Retain genuinely noncurrent snapshots: these contain only the source
+    # population, before the adversarial boundary rows are appended below.
+    oracle["historical_snapshots"] = {
+        name: clinical.load_table(("silver", name)).current_snapshot().snapshot_id
+        for name in ("patients", "encounters")
+    }
     for name, rows in fixture_rows.items():
         clinical.load_table(("silver", name)).append(
             pa.Table.from_pylist(rows, schema=SCHEMAS[name])
