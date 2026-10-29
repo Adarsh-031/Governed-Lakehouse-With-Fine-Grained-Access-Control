@@ -19,14 +19,14 @@ SCHEMA = Schema(
 )
 
 
-def catalog(service):
+def catalog(service, warehouse=WAREHOUSE):
     prefix = service.upper().replace("-", "_")
     return load_catalog(
-        WAREHOUSE,
+        warehouse,
         **{
             "type": "rest",
             "uri": f"{CATALOG}/catalog",
-            "warehouse": WAREHOUSE,
+            "warehouse": warehouse,
             "credential": f"{service}:{os.environ[prefix + '_OIDC_CLIENT_SECRET']}",
             "oauth2-server-uri": TOKEN_ENDPOINT,
             "scope": "openid",

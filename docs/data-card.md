@@ -185,6 +185,30 @@ DECIMAL(18,2) costs, resolve the primary payer name, and sum insurance payments
 adjustments are not extra charges or payer coverage. The single primary-payer
 label does not identify every insurer contributing to coverage. See the
 [mapping and retry decisions](../ingest/README.md#claims-grain-charge-lines-not-headers).
-No names/SSNs enter the shared patient inventory. Care-team/identity loading,
-clinical SQL policies, MIMIC transformation, and larger-population memory/scale
-measurements remain separate work.
+No names/SSNs enter the shared patient inventory. Care-team/identity loading is
+now available in #17, below. Clinical SQL policies, MIMIC transformation, and
+larger-population memory/scale measurements remain separate work.
+
+## Care-team and identity evidence (issue #17)
+
+On **2026-10-29**, the full 1k source passed isolated Docker ingestion and
+Trino/Iceberg DDL acceptance. The normal launcher also loaded the persistent
+local warehouse and verified exact readback: 1,000 patients, 48,976 encounters,
+203,698 charge lines, **1,200 care-team assignments**, and **1,000 restricted
+identity rows**. This persistent load is separate from the disposable tests.
+An identical launcher rerun verified all five existing tables without appending.
+
+Assignments are a seeded synthetic authorization fixture: **600 patients per
+doctor**, **200 shared**, **400 exclusive to each**. Use authenticated logins
+`doctor_alice`/`doctor_bob`, seed **42**, UTC start **2025-01-01** and NULL end.
+The expected token sets are saved privately before loading at
+`data/staged/issue17/care-team-oracle.json`. They reuse the `synthea:` HMAC token
+domain and version **v1**; neither names, source patient IDs nor keys appear in
+the membership oracle. The file remains pseudonymous, sensitive linkage data.
+
+Names are assembled only from approved Synthea name components and stored with
+the same patient token in the separate ETL-only identity warehouse. Trino's
+catalog and object credentials were tested against populated identity metadata
+and Parquet and denied. These are synthetic memberships, not source-provider
+authorization or consent. SQL doctor filters and validity enforcement remain
+#18. See the [decisions and verification record](issue-17.md).

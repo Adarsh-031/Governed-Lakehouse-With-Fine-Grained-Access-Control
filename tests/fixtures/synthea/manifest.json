@@ -57,9 +57,12 @@
         "GENDER",
         "RACE",
         "ETHNICITY",
-        "ZIP"
+        "ZIP",
+        "FIRST",
+        "MIDDLE",
+        "LAST"
       ],
-      "sha256": "1fa2269bfcf51a893d95624817a69388ec775d8ca29e95944a8d7a427a90e3c9"
+      "sha256": "9042d144f2910dcefe8d23ffd90afb9c1a2c188f109004ee7b12295048387657"
     },
     "payers.csv": {
       "rows": 2,

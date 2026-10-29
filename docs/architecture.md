@@ -221,8 +221,9 @@ Register the `hospital` warehouse in the default NIL project at
 `s3://warehouse/silver/`, with Silo's private endpoint, region `us-east-1`, and
 path-style S3 access. This establishes a silver warehouse for #13 without
 loosening ADR-002's prefix policies. A root warehouse would require extra bucket
-privileges and admit clinical/audit location overlap. Additional gold, identity,
-and audit warehouses are separate future registrations with reviewed grants.
+privileges and admit clinical/audit location overlap. Issue #17 now registers
+the separate identity warehouse with ETL-only managed grants, described below.
+Gold and audit remain future registrations with reviewed grants.
 
 Lakekeeper stores the existing scoped ETL storage key encrypted in Postgres;
 the catalog runtime receives no S3 administrator credentials. Sharing that key
@@ -319,3 +320,22 @@ isolated policy copy then applies a doctor row filter and column mask to the
 two-row synthetic Iceberg table, with an unfiltered admin control and negative
 researcher/write checks. These checks verify the enforcement path; clinical
 policies, bypass coverage, and audit collection require their own tests.
+
+## Restricted identity and assignment provisioning (issue #17)
+
+Bootstrap also registers `identity` at `s3://warehouse/identity/` with the
+existing trusted ETL S3 key, matching ADR-002's approved prefix scope. ETL gets
+describe/select/create/modify; the managed Trino and audit-writer principals get
+no identity grants. Bootstrap validates the full storage profile and reconciles
+managed grants on rerun. Vending and remote signing remain disabled. There is
+no identity catalog in ordinary Trino and no expansion of its S3 permissions.
+
+Trusted ETL loads minimal name/token rows there and synthetic assignments in
+`hospital.silver.care_team`, using one validated HMAC patient map across all five
+tables. A source-derived, private expected-membership file is frozen before
+catalog access to support later independent authorization checks. The loader
+preflights all existing clinical/identity tables before mutations and preserves
+identical snapshots on retries; the commits are not a multi-table transaction.
+Clinical SQL grants remain disabled pending #18. See the [decision record and
+validation evidence](issue-17.md) for the assignment rule, validity, oracle
+handling, and explicitly privileged ETL/bootstrap boundary.

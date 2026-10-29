@@ -19,59 +19,6 @@ KEY = b"a" * 32
 REFERENCE = date(2025, 1, 1)
 
 
-@pytest.fixture
-def frames():
-    rows = {
-        "patients": [
-            ["p1", "1980-02-29", "F", "NA", "test", "02139"],
-            ["p2", None, "M", None, None, "invalid"],
-        ],
-        "encounters": [
-            [
-                "e1",
-                "p1",
-                "2024-01-01T01:00:00.123456+01:00",
-                None,
-                "ambulatory",
-                "00123",
-                "visit",
-                None,
-                None,
-            ],
-            ["e2", "p2", None, None, None, None, None, None, None],
-        ],
-        "claims": [["c1", "p1", "e1", "payer1", "payer2"]],
-        "claims_transactions": [
-            ["t1", "c1", "0", "p1", "e1", "CHARGE", "100.01", None, "00456", "procedure", "0.00"],
-            ["t2", "c1", "1", "p1", "e1", "PAYMENT", None, "COPAY", "00456", "procedure", "10.00"],
-            ["t3", "c1", "2", "p1", "e1", "PAYMENT", None, "ECHECK", "00456", "procedure", "60.00"],
-            ["t4", "c1", "3", "p1", "e1", "TRANSFEROUT", None, None, "00456", "procedure", "0.00"],
-            [
-                "t5",
-                "c1",
-                "4",
-                "p1",
-                "e1",
-                "TRANSFERIN",
-                "30.01",
-                None,
-                "00456",
-                "procedure",
-                "0.00",
-            ],
-            ["t6", "c1", "5", "p1", "e1", "PAYMENT", None, "ECHECK", "00456", "procedure", "20.00"],
-            ["t7", "c1", "6", "p1", "e1", "PAYMENT", None, "CASH", "00456", "procedure", "10.01"],
-            ["t8", "c1", "10", "p1", "e1", "CHARGE", "2.99", None, "00789", "second", "0.00"],
-            ["t9", "c1", "11", "p1", "e1", "PAYMENT", None, "CC", "00789", "second", "2.99"],
-        ],
-        "payers": [["payer1", "Primary"], ["payer2", "Secondary"]],
-    }
-    return {
-        name: pd.DataFrame(value, columns=etl.SOURCE_COLUMNS[name].split(), dtype="string")
-        for name, value in rows.items()
-    }
-
-
 def prepare(frames):
     return etl.transform(frames, KEY, "v1", REFERENCE)
 
@@ -106,7 +53,13 @@ def test_native_mapping_preserves_types_and_reconciles_source_counts(frames):
         "payer_coverage": Decimal("80.00"),
     }
     assert c[1]["total_cost"] == Decimal("2.99") and c[1]["payer_coverage"] == 0
-    assert data.report["rows"] == {"patients": 2, "encounters": 2, "claims": 2}
+    assert data.report["rows"] == {
+        "patients": 2,
+        "encounters": 2,
+        "claims": 2,
+        "care_team": 3,
+        "identity": 2,
+    }
     assert data.report["source_rows"]["claims"] == 1
     assert data.report["claims_headers_with_charges"] == 1
     # Row order cannot change line attribution; sequence is numeric, not lexical.
@@ -220,7 +173,7 @@ def test_prepare_checks_manifest_and_drops_unknown_columns(frames, tmp_path):
         etl.prepare(tmp_path, KEY, "v1")
 
 
-def fake_catalog(data):
+def fake_catalog(data, prefix="silver"):
     tables = {}
     catalog = Mock()
     catalog.table_exists.side_effect = lambda identifier: identifier[1] in tables
@@ -231,7 +184,7 @@ def fake_catalog(data):
         table.schema.return_value.as_arrow.return_value = schema
         table.metadata.format_version = 2
         table.spec.return_value.is_unpartitioned.return_value = True
-        table.location.return_value = "s3://warehouse/silver/test"
+        table.location.return_value = f"s3://warehouse/{prefix}/test"
         table.data = pa.Table.from_batches([], schema=schema)
         table.scan.return_value.to_arrow.side_effect = lambda: table.data
         table.append.side_effect = lambda arrow, **kwargs: setattr(table, "data", arrow)
@@ -245,26 +198,30 @@ def fake_catalog(data):
 def test_load_rerun_partial_resume_and_changed_data_rejection(frames):
     data = prepare(frames)
     catalog, tables = fake_catalog(data)
-    assert set(etl.load(data, catalog)["actions"].values()) == {"loaded"}
-    assert set(etl.load(data, catalog)["actions"].values()) == {"verified existing"}
+    identity_catalog, _ = fake_catalog(data, prefix="identity")
+    assert set(etl.load(data, catalog, identity_catalog)["actions"].values()) == {"loaded"}
+    assert set(etl.load(data, catalog, identity_catalog)["actions"].values()) == {
+        "verified existing"
+    }
     assert all(table.append.call_count == 1 for table in tables.values())
     tables["claims"].data = data.tables["claims"].slice(0, 0)
-    etl.load(data, catalog)
+    etl.load(data, catalog, identity_catalog)
     assert tables["claims"].append.call_count == 2
     frames["patients"].loc[0, "GENDER"] = "changed"
     with pytest.raises(etl.ValidationError, match="existing data differs"):
-        etl.load(prepare(frames), catalog)
+        etl.load(prepare(frames), catalog, identity_catalog)
     assert tables["patients"].append.call_count == 1
 
 
 def test_all_tables_preflight_before_mutation(frames):
     data = prepare(frames)
     catalog, tables = fake_catalog(data)
-    etl.load(data, catalog)
+    identity_catalog, _ = fake_catalog(data, prefix="identity")
+    etl.load(data, catalog, identity_catalog)
     tables["patients"].data = data.tables["patients"].slice(0, 0)
     tables["claims"].schema.return_value.as_arrow.return_value = pa.schema([])
     with pytest.raises(etl.ValidationError, match="incompatible existing schema"):
-        etl.load(data, catalog)
+        etl.load(data, catalog, identity_catalog)
     assert tables["patients"].append.call_count == 1
 
 

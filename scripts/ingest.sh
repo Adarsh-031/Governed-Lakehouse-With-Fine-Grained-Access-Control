@@ -7,6 +7,10 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_dir="$(dirname -- "$script_dir")"
 source_dir="${INGEST_SOURCE_DIR:-$repo_dir/data/raw/synthea/1000-seed42}"
 export INGEST_SOURCE_DIR="$source_dir"
+export INGEST_UID="$(id -u)" INGEST_GID="$(id -g)"
 cd "$repo_dir"
+umask 077
+export INGEST_EVIDENCE_DIR="${INGEST_EVIDENCE_DIR:-$repo_dir/data/staged/issue17}"
+mkdir -p -- "$INGEST_EVIDENCE_DIR"
 exec docker compose --env-file "${LAKEHOUSE_ENV_FILE:-data/secrets/runtime.env}" \
   run --build --rm ingest -m ingest.pipeline "$@"

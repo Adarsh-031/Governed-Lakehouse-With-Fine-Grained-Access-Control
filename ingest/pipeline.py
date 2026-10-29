@@ -1,9 +1,12 @@
 """Validate the pinned Synthea export and load the approved silver inventory."""
 
 import argparse
+import hashlib
 import json
 import os
+import random
 import re
+import tempfile
 import warnings
 from dataclasses import dataclass
 from datetime import date
@@ -18,7 +21,7 @@ from ingest.tokenization import patient_token
 from scripts.source_data import csv_inventory
 
 SOURCE_COLUMNS = {
-    "patients": "Id BIRTHDATE GENDER RACE ETHNICITY ZIP",
+    "patients": "Id BIRTHDATE GENDER RACE ETHNICITY ZIP FIRST MIDDLE LAST",
     "encounters": "Id PATIENT START STOP ENCOUNTERCLASS CODE DESCRIPTION REASONCODE REASONDESCRIPTION",
     "claims": "Id PATIENTID APPOINTMENTID PRIMARYPATIENTINSURANCEID SECONDARYPATIENTINSURANCEID",
     "claims_transactions": (
@@ -63,7 +66,22 @@ SCHEMAS = {
             ("payer_coverage", pa.decimal128(18, 2)),
         ]
     ),
+    "care_team": pa.schema(
+        [
+            pa.field("doctor_user", pa.large_string(), nullable=False),
+            pa.field("patient_token", pa.large_string(), nullable=False),
+            pa.field("valid_from", pa.date32(), nullable=False),
+            ("valid_to", pa.date32()),
+        ]
+    ),
+    "identity": pa.schema(
+        [
+            pa.field("patient_token", pa.large_string(), nullable=False),
+            ("name", pa.large_string()),
+        ]
+    ),
 }
+DOCTORS = ("doctor_alice", "doctor_bob")
 
 
 class ValidationError(ValueError):
@@ -143,9 +161,69 @@ def reference_check(frame, column, parent, field):
 class Prepared:
     tables: dict[str, pa.Table]
     report: dict
+    oracle: dict
 
 
-def transform(frames, key, version, reference):
+def assignments(tokens, seed, valid_from, valid_to):
+    """Seeded synthetic membership, independent of CSV order or provider identities."""
+    require(type(seed) is int and 0 <= seed < 2**32, "care_team: invalid seed")
+    require(type(valid_from) is date, "care_team: required valid_from UTC date")
+    require(
+        valid_to is None or (type(valid_to) is date and valid_to > valid_from),
+        "care_team: empty/reversed validity interval",
+    )
+    ids = sorted(tokens.index)
+    random.Random(seed).shuffle(ids)
+    members = {doctor: [] for doctor in DOCTORS}
+    for index, source_id in enumerate(ids):
+        # Every fifth patient is shared; the rest alternate between the two doctors.
+        doctors = DOCTORS if index % 5 == 0 else (DOCTORS[index % 2],)
+        for doctor in doctors:
+            members[doctor].append(tokens[source_id])
+    members = {doctor: sorted(values) for doctor, values in members.items()}
+    rows = [
+        {
+            "doctor_user": doctor,
+            "patient_token": token,
+            "valid_from": valid_from,
+            "valid_to": valid_to,
+        }
+        for doctor, values in members.items()
+        for token in values
+    ]
+    oracle = {
+        "format_version": 1,
+        "assignment_rule": "sorted-source-ids/python-random-shuffle-v1/every-fifth-shared",
+        "seed": seed,
+        "valid_from": valid_from.isoformat(),
+        "valid_to": valid_to.isoformat() if valid_to else None,
+        "validity": "UTC dates; valid_from <= query_date < valid_to; NULL end is ongoing",
+        "expected_patient_tokens": members,
+    }
+    return pd.DataFrame(rows), oracle
+
+
+def oracle_bytes(oracle):
+    return (json.dumps(oracle, sort_keys=True, indent=2) + "\n").encode()
+
+
+def save_oracle(path, oracle):
+    """Publish the source-derived oracle privately; never replace conflicting evidence."""
+    content = oracle_bytes(oracle)
+    require(not path.is_symlink(), "care_team oracle: symlink forbidden")
+    if path.exists():
+        require(path.read_bytes() == content, "care_team oracle differs; migration required")
+        path.chmod(0o600)
+        return
+    # Atomic no-clobber publication; a killed writer cannot publish a partial JSON file.
+    with tempfile.NamedTemporaryFile(dir=path.parent) as staged:
+        staged.write(content)
+        staged.flush()
+        os.fsync(staged.fileno())
+        os.link(staged.name, path)
+
+
+def transform(frames, key, version, reference, *, seed=42, valid_from=None, valid_to=None):
     """All relationships and types are validated before any catalog operation."""
     require(
         len(key) == 32 and bool(re.fullmatch(r"v[1-9][0-9]*", version)), "Invalid HMAC settings"
@@ -252,7 +330,22 @@ def transform(frames, key, version, reference):
             "payer_coverage": lines.ID.map(covered).fillna(Decimal("0.00")),
         }
     )
-    frames_out = {"patients": patients, "encounters": encounters, "claims": claims}
+    care_team, oracle = assignments(tokens, seed, valid_from or reference, valid_to)
+    # Only approved name components enter the separately routed identity Arrow table.
+    names = p[["FIRST", "MIDDLE", "LAST"]].apply(
+        lambda row: (
+            " ".join(str(value).strip() for value in row.dropna() if str(value).strip()) or None
+        ),
+        axis=1,
+    )
+    identity = pd.DataFrame({"patient_token": p.Id.map(tokens), "name": names})
+    frames_out = {
+        "patients": patients,
+        "encounters": encounters,
+        "claims": claims,
+        "care_team": care_team,
+        "identity": identity,
+    }
     tables = {}
     for name, frame in frames_out.items():
         try:
@@ -273,11 +366,24 @@ def transform(frames, key, version, reference):
         "claims_headers_with_charges": int(lines.CLAIMID.nunique()),
         "orphan_patient_tokens": 0,
         "orphan_encounter_ids": 0,
+        "care_team": {
+            "seed": seed,
+            "valid_from": oracle["valid_from"],
+            "valid_to": oracle["valid_to"],
+            "doctor_patient_counts": {
+                doctor: len(values) for doctor, values in oracle["expected_patient_tokens"].items()
+            },
+            "overlap_patients": len(
+                set(oracle["expected_patient_tokens"][DOCTORS[0]])
+                & set(oracle["expected_patient_tokens"][DOCTORS[1]])
+            ),
+        },
     }
-    return Prepared(tables, report)
+    oracle.update({"token_key_version": version, "patient_id_domain": "synthea:"})
+    return Prepared(tables, report, oracle)
 
 
-def prepare(source, key, version):
+def prepare(source, key, version, **assignment_options):
     manifest = json.loads((source / "manifest.json").read_text())
     parameters = manifest["parameters"]
     require(
@@ -287,27 +393,32 @@ def prepare(source, key, version):
     require(csv_inventory(source) == manifest["tables"], "Source inventory/checksum mismatch")
     frames = {}
     for name, columns in SOURCE_COLUMNS.items():
-        # Preserve codes, ZIPs and literal 'NA'; do not project names/SSNs into frames.
+        # Preserve codes, ZIPs and literal 'NA'; SSNs/contact fields are never read.
         frame = pd.read_csv(
             source / f"{name}.csv", dtype="string", keep_default_na=False, usecols=columns.split()
         )
         frames[name] = frame.apply(lambda series: series.str.strip()).replace("", pd.NA)
     require(len(frames["patients"]) == parameters["population"], "Patient population mismatch")
     reference = pd.to_datetime(parameters["reference_date"], format="%Y%m%d").date()
-    prepared = transform(frames, key, version, reference)
+    prepared = transform(frames, key, version, reference, **assignment_options)
     prepared.report["source_sha256"] = {
         name: item["sha256"] for name, item in manifest["tables"].items()
     }
+    prepared.oracle["source_sha256"] = prepared.report["source_sha256"]
+    prepared.report["care_team_oracle_sha256"] = hashlib.sha256(
+        oracle_bytes(prepared.oracle)
+    ).hexdigest()
     return prepared
 
 
-def etl_catalog():
+def etl_catalog(warehouse="hospital"):
+    require(warehouse in {"hospital", "identity"}, "Unexpected ETL warehouse")
     return load_catalog(
-        "hospital",
+        warehouse,
         **{
             "type": "rest",
             "uri": "http://catalog:8181/catalog",
-            "warehouse": "hospital",
+            "warehouse": warehouse,
             "credential": f"etl:{os.environ['ETL_OIDC_CLIENT_SECRET']}",
             "oauth2-server-uri": "http://keycloak:8080/realms/lakehouse/protocol/openid-connect/token",
             "scope": "openid",
@@ -323,17 +434,25 @@ def etl_catalog():
 
 
 def ordered(table):
-    return table.sort_by([(table.column_names[0], "ascending")]).replace_schema_metadata(None)
+    return table.sort_by(
+        [(name, "ascending") for name in table.column_names]
+    ).replace_schema_metadata(None)
 
 
-def load(prepared, catalog):
+def load(prepared, catalog, identity_catalog):
     """Single trusted writer. Preflight all tables; resume identical partial runs."""
     existing = {}
+    targets = {
+        name: (identity_catalog, ("identity", "patient_identity"), "identity")
+        if name == "identity"
+        else (catalog, ("silver", name), "silver")
+        for name in prepared.tables
+    }
     for name, expected in prepared.tables.items():
-        identifier = ("silver", name)
-        if not catalog.table_exists(identifier):
+        client, identifier, prefix = targets[name]
+        if not client.table_exists(identifier):
             continue
-        table = catalog.load_table(identifier)
+        table = client.load_table(identifier)
         require(
             table.schema().as_arrow().equals(expected.schema, check_metadata=False),
             f"{name}: incompatible existing schema",
@@ -343,7 +462,7 @@ def load(prepared, catalog):
             f"{name}: expected unpartitioned Iceberg v2",
         )
         require(
-            table.location().startswith("s3://warehouse/silver/"),
+            table.location().startswith(f"s3://warehouse/{prefix}/"),
             f"{name}: unexpected storage location",
         )
         actual = table.scan().to_arrow()
@@ -353,12 +472,14 @@ def load(prepared, catalog):
         )
         existing[name] = table, len(actual)
     catalog.create_namespace_if_not_exists("silver")
+    identity_catalog.create_namespace_if_not_exists("identity")
     actions = {}
     for name, expected in prepared.tables.items():
+        client, identifier, _ = targets[name]
         table, count = existing.get(name, (None, 0))
         if table is None:
-            table = catalog.create_table(
-                ("silver", name),
+            table = client.create_table(
+                identifier,
                 expected.schema,
                 properties={"format-version": "2", "write.format.default": "parquet"},
             )
@@ -374,7 +495,7 @@ def load(prepared, catalog):
             actions[name] = "loaded"
         else:
             actions[name] = "verified existing"
-        readback = catalog.load_table(("silver", name)).scan().to_arrow()
+        readback = client.load_table(identifier).scan().to_arrow()
         require(ordered(readback).equals(ordered(expected)), f"{name}: readback mismatch")
     return {**prepared.report, "actions": actions, "readback_verified": True}
 
@@ -383,13 +504,29 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, default=Path("/source"))
     parser.add_argument("--validate-only", action="store_true")
+    parser.add_argument("--assignment-seed", type=int, default=42)
+    parser.add_argument("--valid-from", type=date.fromisoformat)
+    parser.add_argument("--valid-to", type=date.fromisoformat)
+    parser.add_argument("--oracle", type=Path, default=Path("/evidence/care-team-oracle.json"))
     args = parser.parse_args()
     try:
         # SDK warnings can contain configuration; stdout is only the safe report.
         warnings.filterwarnings("ignore")
         key, version = key_from_environment()
-        prepared = prepare(args.source, key, version)
-        report = prepared.report if args.validate_only else load(prepared, etl_catalog())
+        prepared = prepare(
+            args.source,
+            key,
+            version,
+            seed=args.assignment_seed,
+            valid_from=args.valid_from,
+            valid_to=args.valid_to,
+        )
+        if args.validate_only:
+            report = prepared.report
+        else:
+            # Freeze expected sets before catalog reads/writes, never from the live care_team.
+            save_oracle(args.oracle, prepared.oracle)
+            report = load(prepared, etl_catalog(), etl_catalog("identity"))
         print(json.dumps(report, sort_keys=True))
     except Exception as error:  # noqa: BLE001 - never expose SDK/source/credential text
         message = str(error) if isinstance(error, ValidationError) else type(error).__name__

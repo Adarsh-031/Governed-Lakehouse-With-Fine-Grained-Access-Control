@@ -131,3 +131,10 @@ data requires an explicit migration. Use `--validate-only` for source checks,
 `INGEST_SOURCE_DIR` for another absolute source directory, and
 `LAKEHOUSE_ENV_FILE` for another Compose env file. See the
 [ingestion mapping, decisions and retry limits](../ingest/README.md#synthea-to-silver-issue-16).
+
+The same command now loads `care_team` and the ETL-only restricted identity
+table (#17). It saves each doctor's expected token set privately under
+`data/staged/issue17/care-team-oracle.json`; `INGEST_EVIDENCE_DIR` chooses a
+different private directory. Optional `--assignment-seed`, `--valid-from`, and
+`--valid-to` select the reproducible synthetic assignment settings. See
+[care-team rules and oracle handling](../ingest/README.md#care-team-and-restricted-identity-issue-17).

@@ -21,7 +21,7 @@ and warehouses require review; unlisted resources/operations receive no grants.
   group provider. Unknown groups receive no grants. Each MVP user has exactly
   one group; reject overlapping membership until precedence is reviewed.
 - `table`: a schema-contract key; its `resource` is the exact intended SQL name.
-  Identity and audit names reserve future catalogs, not existing registrations.
+  Identity has an ETL-only warehouse registration; audit reserves a future catalog.
 - `column`: exact name; its SQL type comes from the schema contract.
 - `operations`: `SELECT` or `NONE`, consistent across each group/table.
 - `row_scope`: a predicate below, consistent across each group/table.
@@ -124,9 +124,10 @@ non-leap years. The same input/reference date reproduces the same band; do not
 replace DATE birthdate with text or derive age dynamically at query time.
 
 `hospital.silver.*` reserves tables in ADR-003's clinical warehouse.
-`identity.identity.patient_identity` and `audit.audit.query_events` reserve
-separate future catalogs/warehouses under `identity/` and `audit/`. Names create
-no registrations/grants. Audit columns match the
+`identity.identity.patient_identity` is loaded through the separate ETL-only
+identity warehouse under `identity/` (#17), without an interactive Trino catalog.
+`audit.audit.query_events` still reserves a future catalog/warehouse under
+`audit/`. SQL names alone create no registrations/grants. Audit columns match the
 [normalized event contract](../audit/event-contract.json); timestamps are stored
 as UTC TIMESTAMP(6) throughout. Restrict audit text in ingestion/spool paths too.
 

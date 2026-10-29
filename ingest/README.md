@@ -124,8 +124,9 @@ variables from the private env file, is `uv run --locked python -m ingest.pipeli
 - Patient IDs are canonicalized and namespaced as `synthea:<Id>` before calling
   `patient_token`. Decode the generated 32-byte `HMAC_KEY_HEX`; use the same key
   and `HMAC_KEY_VERSION` across patients, encounters and claims. Names, SSNs,
-  addresses and unrelated columns never enter these Arrow tables. #17 must reuse
-  this exact ID domain for care_team and restricted identity.
+  addresses and unrelated columns never enter the clinical Arrow tables.
+  Care-team and restricted identity reuse this exact token map; approved name
+  components are projected only into the separate identity Arrow table.
 - Use the manifest's simulation `reference_date` as the fixed age reference;
   record it in the JSON report and Iceberg snapshot summary. Calendar years,
   Feb 29 anniversaries, NULL/future births and the `90+` cap follow the access
@@ -172,13 +173,14 @@ Use PyIceberg under the ETL service identity to create missing unpartitioned
 Iceberg v2/Parquet tables in `hospital.silver`, matching issue #15's SQL types and
 required keys. Existing tables must have the exact columns/types/nullability,
 version, layout and silver location. No SQL DDL or interactive grants are added.
-Identity and care-team loading remain #17; clinical policy enforcement remains #18.
+The same command now also loads care-team and restricted identity (#17), as
+described below. Clinical policy enforcement remains #18.
 
 An identical rerun verifies every stored value without appending or changing
 snapshots. A run interrupted between table commits can resume missing/empty
 tables, provided all existing rows match. Changed data, keys, versions or schema
 fail with a migration-required error: there is no implicit overwrite, upsert,
-rotation or cohort merge. Each table commit is atomic; the three-table run is
+rotation or cohort merge. Each table commit is atomic; the five-table run is
 **not** a distributed transaction. Keep interactive grants disabled until the
 whole run passes. Run one trusted writer at a time; concurrent ETL is unsupported.
 Failed writes may leave unreferenced objects for separately reviewed maintenance.
@@ -209,3 +211,85 @@ NULLs, UTC microseconds, cents, leading zeros, malformed data, orphan/mismatched
 references, payments/transfers, source integrity, schema drift, partial retries,
 and secret-safe failures. The fixture is a handcrafted mapping example, not a
 claim that Synthea generated those identifiers.
+
+## Care-team and restricted identity (issue #17)
+
+`./scripts/ingest.sh` now loads all five tables, including
+`hospital.silver.care_team` and `identity.identity.patient_identity`. Existing
+issue #16 clinical rows are verified and preserved while the two missing tables
+are added. Bootstrap registers the separate `identity` warehouse at
+`s3://warehouse/identity/`, validates its storage profile, and reconciles ETL
+write/read grants while removing managed Trino/audit-writer grants. No identity
+catalog is mounted in ordinary Trino; its unchanged S3 policy also denies
+`identity/`. Interactive admin has no identity grant. The trusted bootstrap and
+ETL services remain privileged actors.
+
+Assignments are explicitly synthetic authorization fixtures, not an inferred
+clinical relationship. Provider UUIDs do not map to authenticated logins, so
+use `doctor_alice` and `doctor_bob` from the access contract. Sort canonical
+source IDs, shuffle with an isolated Python `Random(42)`, assign every fifth
+patient to both doctors, and alternate the remaining patients by shuffled index
+parity. CSV row order has no effect. On 1,000 patients this gives 600 patients
+per doctor, 200 shared, and 400 exclusive to each; every patient is covered.
+Small cohorts need not have those proportions. The seed is configurable with
+`--assignment-seed`; changing it on an already loaded cohort requires migration.
+
+Validity uses UTC `DATE` and `[valid_from, valid_to)`. The default start is the
+manifest's fixed reference date, with NULL end for ongoing assignments; it does
+not expire just because the simulated encounters are historical. Use
+`--valid-from YYYY-MM-DD --valid-to YYYY-MM-DD` for a finite interval. Missing
+start values in the generator and empty/reversed intervals fail before writes.
+All generated tokens come from the same validated patient map, so assignments
+are unique and cannot introduce orphan patients.
+
+Identity preserves only `(patient_token, name)`. Join trimmed, nonempty Synthea
+`FIRST`, `MIDDLE`, and `LAST` with one separator; all missing components produce
+NULL. Names are display values, never token keys; duplicate names are allowed.
+SSN, address, prefix/suffix, maiden name, contact fields, and other source
+columns are not copied. Arrow schemas, Iceberg v2/Parquet, nullability and
+unpartitioned layout match the existing SQL contract.
+
+### Saved expected sets
+
+The launcher creates private `data/staged/issue17/` (umask `077`) and runs ETL
+as the invoking UID/GID. It mounts this directory as the sole persistent writable
+ingestion mount. `INGEST_EVIDENCE_DIR=/absolute/private/path` selects another
+directory, which the caller must keep private. The source remains read-only.
+
+Before any catalog reads/writes, ETL atomically saves mode-`0600`
+`care-team-oracle.json` with each doctor's sorted expected patient tokens, seed,
+rule version, UTC validity, source checksums, token version and ID domain. It is
+derived from the validated source, never from the loaded care-team table. The
+report contains its SHA-256 and counts, without patient tokens, names or keys.
+The oracle is pseudonymous membership evidence and stays git-ignored with the
+other generated data. Preserve it privately for #18's independent SQL checks;
+select the saved set only when the query's UTC date lies in the saved interval.
+
+Identical retries preserve the oracle bytes and table snapshots. A changed
+oracle fails rather than silently redefining the expected sets. After oracle
+validation, both warehouses and all existing table schemas/values/locations are
+preflighted before the first table mutation. A saved oracle is **candidate**
+evidence until the final report says `readback_verified: true`; a failed run
+can leave it alongside an incomplete multi-table load. `--validate-only` emits
+the report without saving an oracle or connecting to either catalog. Direct
+Python invocations can choose an existing private parent directory with
+`--oracle /private/path/care-team-oracle.json`.
+
+### Verification and scope
+
+```sh
+uv run --locked --group dev pytest tests/unit/test_ingestion.py tests/unit/test_care_team.py
+RUN_INGEST_INTEGRATION=1 uv run --locked --group dev pytest tests/integration/test_ingestion.py -v
+```
+
+The Docker acceptance test compares the saved sets against fresh care-team
+readback, checks identity coverage/uniqueness and actual warehouse locations,
+verifies inclusive-start/exclusive-end semantics on ongoing/finite fixtures,
+preserves snapshots/oracle bytes on retry,
+and rejects key-version/seed drift. It proves populated identity catalog denial
+for Trino, audit-writer, anonymous and invalid tokens, plus denial of actual
+identity metadata/Parquet reads using Trino S3 credentials. The existing DDL
+test covers denial for all five interactive users. Clinical doctor row filters,
+expiry enforcement inside Trino, and masks still require #18; offline interval
+checks alone do not establish them. See the [implementation and decision
+record](../docs/issue-17.md) for acceptance evidence and review text.
