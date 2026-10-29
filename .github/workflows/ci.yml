@@ -95,6 +95,11 @@ jobs:
         # Includes the schema/classification/access-contract drift checks.
         run: uv run --no-sync pytest tests/unit -v --strict-config --strict-markers --junitxml=unit-test-results.xml
 
+      - name: Verify clinical access matrix, doctor filters, masks and denials
+        env:
+          RUN_POLICY_INTEGRATION: "1"
+        run: uv run --no-sync pytest tests/integration/test_policy.py -v --strict-config
+
       - name: Verify silver and restricted identity DDL on Trino and Iceberg
         env:
           RUN_SCHEMA_INTEGRATION: "1"

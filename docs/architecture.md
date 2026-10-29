@@ -336,6 +336,9 @@ tables. A source-derived, private expected-membership file is frozen before
 catalog access to support later independent authorization checks. The loader
 preflights all existing clinical/identity tables before mutations and preserves
 identical snapshots on retries; the commits are not a multi-table transaction.
-Clinical SQL grants remain disabled pending #18. See the [decision record and
+Issue #18 implements the clinical SELECT/filter/mask rules, with a protected
+filter reader and a second read-only system controller. See
+[policy implementation](../policies/IMPLEMENTATION.md) and
+[issue #18 decisions](issue-18.md). See the [issue #17 decision record and
 validation evidence](issue-17.md) for the assignment rule, validity, oracle
 handling, and explicitly privileged ETL/bootstrap boundary.

@@ -40,9 +40,11 @@ commands, logs, or commits.
 `doctor_alice` and `doctor_bob` are the existing doctor identities generated in
 issue #4; no secret rotation or extra `doctor_1` account is needed. Static
 `auth/groups.txt` maps the five existing identities to their reviewed group names.
-Authenticated users can run identity/literal queries, but the committed
-`policies/rules.json` intentionally grants no catalog/table access. Implement
-clinical grants separately; this issue supplies the enforcement path.
+The committed `policies/rules.json` now grants only the clinical contract's SELECT
+permissions (#18). Doctors receive care-team patient filters; researchers receive
+ZIP/month masks and hidden fields; billing receives claims without free text;
+admin has verification reads without identity or restricted audit text. See
+[policy implementation](../../policies/IMPLEMENTATION.md).
 The previous empty legacy `principals` section rejected even a principal using
 its own username. It is removed in favor of Trino's authenticated user mapping
 and the existing empty impersonation rules, which continue to deny changing users.
@@ -72,7 +74,13 @@ verifies query login.
 Worker catalog announcements propagate asynchronously after startup; the
 acceptance test retries only `NO_NODES_AVAILABLE` for up to 30 seconds before
 checking the exact filtered/masked result.
-Restart Trino after editing policies or groups to apply them deterministically.
+File rules and a second built-in read-only controller must both approve access.
+The latter closes Trino 476's file-policy gap for table procedures. After pulling
+#18, recreate Trino with `up -d --wait --force-recreate --no-deps trino` to add
+the new controller mount; a restart alone does not change container mounts.
+For later policy/group edits, validate with `uv run --locked python scripts/policy.py`
+and restart Trino to apply them deterministically. Freeze the policy with
+`--experiment-dir results/raw/<run>/policy` before each experiment.
 HTTP inside the private storage/catalog/OIDC stack remains the local limitation
 described in ADR-003.
 
@@ -98,5 +106,8 @@ table: the doctor sees only `[1, "redacted"]`, the admin sees both original
 rows, and researcher SELECT and doctor DELETE are refused. This proves the
 actual Trino Iceberg connector applies system file filters/masks while reading
 Lakekeeper metadata and Silo Parquet. The committed policy is never broadened.
-This is not verification of future patient policies, clinical leakage controls,
-or audit delivery. CI runs this test along with storage/catalog acceptance tests.
+Clinical coverage is in `RUN_POLICY_INTEGRATION=1 uv run --locked --group dev
+pytest tests/integration/test_policy.py -v`. It runs the exact committed rules
+against ingested data and independent date/NULL/mask fixtures; see
+[the decisions and verification record](../../docs/issue-18.md). Audit delivery
+remains separate work. CI runs both tests alongside storage/catalog checks.

@@ -32,11 +32,22 @@ def test_silver_ddl_types_roundtrip_rerun_and_restricted_identity(compose, tmp_p
     clinical.write_text(catalog)
     identity = tmp_path / "identity.properties"
     identity.write_text(catalog.replace("warehouse=hospital", "warehouse=identity"))
+    provisioning_config = tmp_path / "provisioning.properties"
+    provisioning_config.write_text(
+        (ROOT / "docker/trino/config.properties")
+        .read_text()
+        .replace(
+            "access-control.config-files=/etc/trino/access-control.properties,"
+            "/etc/trino/read-only.properties",
+            "access-control.config-files=/etc/trino/access-control.properties",
+        )
+    )
     override = compose.override_file
     override.write_text(
         override.read_text()
         + f"      - {clinical}:/etc/trino/catalog/hospital.properties:ro\n"
         + f"      - {identity}:/etc/trino/catalog/identity.properties:ro\n"
+        + f"      - {provisioning_config}:/etc/trino/config.properties:ro\n"
         + "    environment:\n"
         + "      TRINO_OIDC_CLIENT_SECRET: ${ETL_OIDC_CLIENT_SECRET}\n"
         + "      TRINO_STORAGE_ACCESS_KEY: ${ETL_STORAGE_ACCESS_KEY}\n"
@@ -175,13 +186,28 @@ def test_silver_ddl_types_roundtrip_rerun_and_restricted_identity(compose, tmp_p
             assert execute(f"SELECT count(*) FROM {resource}")[0] == [[1]]
             assert location in execute(f"SHOW CREATE TABLE {resource}")[0][0][0]
 
-        # Restore exact committed no-grants policy and prove DDL conferred no access.
+        # Restore the exact clinical policy and the second read-only controller.
         compose.policy.write_text(baseline)
+        provisioning_config.write_text((ROOT / "docker/trino/config.properties").read_text())
         compose("restart", "trino")
         compose("up", "-d", "--wait", "--no-deps", "trino")
         connect()
         for user in ("admin", "doctor_alice", "doctor_bob", "researcher", "billing"):
             for resource in locations:
-                assert execute(f"SELECT * FROM {resource}", user=user, success=False)[1] == (
-                    "PERMISSION_DENIED"
-                )
+                table = resource.rsplit(".", 1)[-1]
+                allowed = {
+                    "admin": {"patients", "encounters", "claims", "care_team"},
+                    "doctor_alice": {"patients", "encounters"},
+                    "doctor_bob": {"patients", "encounters"},
+                    "researcher": {"patients", "encounters"},
+                    "billing": {"claims"},
+                }
+                if table in allowed[user]:
+                    assert execute(f"SELECT count(*) FROM {resource}", user=user)[0] == (
+                        [[0]] if user == "doctor_bob" else [[1]]
+                    )
+                else:
+                    assert (
+                        execute(f"SELECT * FROM {resource}", user=user, success=False)[1]
+                        == "PERMISSION_DENIED"
+                    )

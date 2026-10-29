@@ -8,3 +8,8 @@ charge/payment reconciliation, schema drift, safe retries, launcher arguments,
 and secret-safe errors. The Docker counterpart is
 `RUN_INGEST_INTEGRATION=1 uv run --locked --group dev pytest tests/integration/test_ingestion.py -v`;
 see [ingestion verification](../../ingest/README.md#verification) for the full 1k run.
+
+`test_policy.py` checks every matrix cell against the first effective rule,
+explicit default denials, the reserved filter identity, generated-byte/digest
+drift, invalid memberships, and preservation of per-experiment evidence. It is
+complemented by the real-engine `tests/integration/test_policy.py` test.

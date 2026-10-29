@@ -7,7 +7,8 @@ authorization. Docker acceptance tests cover Iceberg create/read, persistence,
 and synthetic row-filter/mask enforcement. Reproducible Synthea CSV generation
 and public MIMIC-IV demo acquisition are available. Synthea-to-silver Iceberg
 ingestion includes seeded care-team assignments, saved doctor patient sets, and
-ETL-only restricted identity; clinical policies remain to be implemented. DDL is available
+ETL-only restricted identity. Clinical file policies implement role SELECT grants,
+doctor care-team row filters, hidden columns and researcher masks. DDL is available
 with isolated Trino/Iceberg acceptance coverage; see [schema setup](sql/schema/README.md).
 
 ## Goal
@@ -56,7 +57,13 @@ Keep necessary clinical identity data in a separately restricted identity table.
    public clinical demo. See the [data card](docs/data-card.md) for reproduction,
    measured row counts, and larger populations. Load the sample with
    `./scripts/ingest.sh`; see the [ingestion mapping and checks](ingest/README.md#synthea-to-silver-issue-16).
-8. Implement and run permission tests before expanding tables and data size.
+8. Check the policy and retain its digest with each experiment:
+   `uv run --locked python scripts/policy.py --experiment-dir results/raw/run-001/policy`.
+   After pulling #18, recreate Trino to add its second read-only controller mount:
+   `docker compose --env-file data/secrets/runtime.env up -d --wait --force-recreate --no-deps trino`.
+   Run clinical checks with `RUN_POLICY_INTEGRATION=1 uv run --locked --group dev pytest tests/integration/test_policy.py -v`.
+   See [policy implementation](policies/IMPLEMENTATION.md) and
+   [issue #18 decisions/viva notes](docs/issue-18.md).
 
 ## Build order
 - [x] Choose catalog implementation and pin service versions (ADR-001).
@@ -64,7 +71,7 @@ Keep necessary clinical identity data in a separately restricted identity table.
 - [x] Generate a reproducible 1k Synthea source sample and acquire the public MIMIC-IV demo.
 - [x] Load and validate patients, encounters, and charge-level claims.
 - [x] Generate and load care_team assignments and restricted identity (#17).
-- [ ] Restrict identities; implement doctor filters and researcher/billing masks.
+- [x] Restrict identities; implement doctor filters and researcher masks/billing projections (#18).
 - [ ] Implement durable audit collection and query-ID reconciliation.
 - [ ] Implement positive access and negative bypass tests.
 - [ ] Run scale and equivalent-output policy-overhead benchmarks.
@@ -83,15 +90,18 @@ create/append/read, service grants, and unchanged data/snapshots after recreatin
 the catalog, storage, and all three databases. Trino acceptance tests check
 CA-verified HTTPS authentication, wrong-password rejection, impersonation denial,
 server-managed groups, private-service ports, and system row filters/masks on
-synthetic Iceberg data. The committed policy still grants no data access;
-clinical rules and audit delivery remain unverified. Internal services use HTTP
+synthetic Iceberg data. Clinical acceptance checks the complete access matrix,
+source-derived doctor sets, date boundaries, mask outputs/types, metadata and
+forbidden operations. Audit delivery remains future work. Internal services use HTTP
 on a private local Docker network; TLS currently covers client-to-Trino and
 Trino's single-node internal communication.
 
 Issue #5's [access contract](policies/README.md) now specifies every MVP
 role/table/column decision, row scope, and mask output against an explicit
 column inventory. Contract checks run in the unit suite; teammate sign-off is
-pending. This defines the target for #18 and does not enable clinical grants.
+pending. Issue #18 now compiles and enforces that contract; audit admin SELECT
+is a reserved policy tested with isolated fixture data, pending its production
+read path. Identity remains denied to every interactive role.
 
 ## Repository map
 docker/: runtime configuration; ingest/: ETL and classification;

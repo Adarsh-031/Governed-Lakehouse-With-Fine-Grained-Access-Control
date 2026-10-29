@@ -15,7 +15,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def query(client, sql, *, user="doctor_alice", password=None, headers=None):
+def query(client, sql, *, user="doctor_alice", password=None, headers=None, error_info=None):
     """Follow the statement protocol; never include credentials in diagnostics."""
     response = client.post(
         "/v1/statement",
@@ -39,6 +39,8 @@ def query(client, sql, *, user="doctor_alice", password=None, headers=None):
         result = response.json()
         rows.extend(result.get("data", []))
     error = result.get("error", {}).get("errorName")
+    if error_info is not None:
+        error_info.update(result.get("error", {}))
     return 200, rows, error
 
 
@@ -99,7 +101,7 @@ def test_https_authentication_and_system_policy_on_lakekeeper(compose):
             "PERMISSION_DENIED",
         )
         table = "hospital.catalog_smoke.roundtrip"
-        # First run the exact committed policy: successful login gives no table grants.
+        # The clinical policy never grants the unrelated catalog smoke table.
         assert query(client, f"SELECT * FROM {table}", password=password)[2] == "PERMISSION_DENIED"
 
         # Permit only this synthetic table in the isolated project's policy copy.

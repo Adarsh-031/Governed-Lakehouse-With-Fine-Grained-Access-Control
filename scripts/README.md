@@ -2,6 +2,16 @@
 
 Setup, ingestion, policy validation, tests, and benchmark orchestration.
 
+## Validate and record the policy (issue #18)
+
+`uv run --locked python scripts/policy.py` verifies the generated policy and
+prints its version and SHA-256 digest. After reviewing contract changes, run
+with `--write` and commit `policies/rules.json` and `policies/version.json`.
+Before each access/benchmark experiment, pass
+`--experiment-dir results/raw/<run>/policy` to freeze the rules, input/configuration
+hashes and matching files beside the results. Reusing a directory with different
+policy bytes fails. See [policy setup and limitations](../policies/IMPLEMENTATION.md).
+
 ## Acquire reproducible source data (issue #3)
 
 `./scripts/generate_synthea.sh --patients 1000 --seed 42` generates a pinned
