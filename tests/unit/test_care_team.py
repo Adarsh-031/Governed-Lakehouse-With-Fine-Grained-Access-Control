@@ -7,10 +7,11 @@ from pathlib import Path
 import pandas as pd
 import pyarrow as pa
 import pytest
-from test_ingestion import KEY, REFERENCE, fake_catalog
 
 from ingest import pipeline as etl
 from ingest.tokenization import patient_token
+
+from .test_ingestion import KEY, REFERENCE, fake_catalog
 
 
 def prepared(frames, **options):

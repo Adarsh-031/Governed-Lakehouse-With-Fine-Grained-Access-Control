@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pyarrow as pa
 
-from ingest.pipeline import SCHEMAS, etl_catalog
+from ingest.pipeline import SCHEMAS, etl_catalog, key_from_environment, prepare
 
 
 def token(name):
@@ -15,7 +15,6 @@ def token(name):
 
 
 def main():
-    clinical = etl_catalog()
     today = datetime.now(UTC).date()
     yesterday, tomorrow = today - timedelta(days=1), today + timedelta(days=1)
     names = [
@@ -94,11 +93,40 @@ def main():
                 "valid_to": end,
             }
         )
-    for name, rows in (
-        ("patients", patients),
-        ("encounters", encounters),
-        ("care_team", assignments),
-    ):
+    claims = [
+        {
+            "claim_id": f"issue18-{name}",
+            "patient_token": token(name),
+            "encounter_id": f"issue18-{name}",
+            "payer": "fixture payer",
+            "procedure_code": "00789",
+            "procedure_description": "restricted fixture",
+            "total_cost": None,
+            "payer_coverage": None,
+        }
+        for name in names
+    ]
+    fixture_rows = {
+        "patients": patients,
+        "encounters": encounters,
+        "claims": claims,
+        "care_team": assignments,
+    }
+    # Capture unfiltered input values before catalog access. Access expectations
+    # apply separate Python semantics, never the deployed SQL masks or live grants.
+    key, version = key_from_environment()
+    prepared = prepare(Path("/source"), key, version)
+    data_oracle = {
+        name: [*prepared.tables[name].to_pylist(), *rows] for name, rows in fixture_rows.items()
+    }
+    data_oracle["audit"] = [
+        {"query_id": "synthetic-query", "query_text_restricted": "restricted text"}
+    ]
+    data_path = Path("/evidence/access-data-oracle.json")
+    data_path.write_text(json.dumps(data_oracle, default=str))
+    data_path.chmod(0o600)
+    clinical = etl_catalog()
+    for name, rows in fixture_rows.items():
         clinical.load_table(("silver", name)).append(
             pa.Table.from_pylist(rows, schema=SCHEMAS[name])
         )
@@ -138,6 +166,11 @@ def main():
             schema=SCHEMAS["identity"],
         )
     )
+    # A real, existing bronze resource ensures SQL negatives cannot pass merely
+    # because no bronze table was registered. Production service grants stay as-is.
+    clinical.create_namespace("bronze")
+    bronze = clinical.create_table(("bronze", "access_probe"), pa.schema([("value", pa.string())]))
+    bronze.append(pa.table({"value": ["restricted synthetic bronze sentinel"]}))
     oracle["snapshots"] = {
         name: clinical.load_table(("silver", name)).current_snapshot().snapshot_id
         for name in ("patients", "encounters")
