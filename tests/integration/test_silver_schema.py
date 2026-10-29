@@ -10,7 +10,8 @@ from pathlib import Path
 import httpx
 import pytest
 import yaml
-from test_trino import query
+
+from .test_trino import query
 
 ROOT = Path(__file__).resolve().parents[2]
 TABLES = yaml.safe_load((ROOT / "policies/schema-contract.yaml").read_text())["tables"]

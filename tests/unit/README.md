@@ -13,3 +13,8 @@ see [ingestion verification](../../ingest/README.md#verification) for the full 1
 explicit default denials, the reserved filter identity, generated-byte/digest
 drift, invalid memberships, and preservation of per-experiment evidence. It is
 complemented by the real-engine `tests/integration/test_policy.py` test.
+
+`test_access_oracle.py` checks independent ZIP/month mask expectations and
+rejects leaked, missing, substituted, and duplicate rows. Its real-engine
+counterpart is `RUN_ACCESS_INTEGRATION=1 uv run --locked --group dev pytest
+tests/access -v`; see [access acceptance](../access/README.md).
