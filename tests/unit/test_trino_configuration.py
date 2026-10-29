@@ -38,7 +38,15 @@ def test_trino_is_the_only_published_service_and_receives_only_its_secrets():
     }
     assert trino["depends_on"]["catalog-init"]["condition"] == "service_completed_successfully"
     assert trino["read_only"] is True
-    assert all(mount.endswith(":ro") for mount in trino["volumes"])
+    assert all(
+        mount.endswith(":ro") if isinstance(mount, str) else mount["read_only"]
+        for mount in trino["volumes"]
+    )
+    secret_mounts = [mount for mount in trino["volumes"] if isinstance(mount, dict)]
+    assert len(secret_mounts) == 3
+    assert all(
+        mount["type"] == "bind" and not mount["bind"]["create_host_path"] for mount in secret_mounts
+    )
 
 
 def test_iceberg_uses_system_policy_and_scoped_service_credentials_over_https_only():

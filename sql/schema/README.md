@@ -29,9 +29,11 @@ the acceptance test, provision a separately trusted SQL execution path with:
   identity must remain unavailable to every MVP interactive SQL group.
 
 The trusted PyIceberg [ingestion path](../../ingest/README.md#synthea-to-silver-issue-16)
-now creates/validates patients, encounters and claims directly using ETL authority;
-it does not execute these SQL files or register the identity warehouse.
-Other warehouse registration and trusted SQL provisioning are separate work.
+now creates/validates patients, encounters, claims and care_team directly using ETL
+authority, plus patient_identity in the separate identity warehouse. Production
+bootstrap registers that ETL-only warehouse (#17). Ingestion does not execute
+these SQL files or register a Trino identity catalog. Trusted SQL provisioning
+for the DDL test remains separate from ordinary interactive SQL.
 The DDL omits explicit locations so Lakekeeper assigns paths inside each
 warehouse's storage boundary. Creating a schema/table name is not an access grant.
 Clinical policies remain issue #18; do not expose loaded data before those checks.
@@ -83,8 +85,8 @@ RUN_SCHEMA_INTEGRATION=1 uv run --locked --group dev pytest tests/integration/te
 
 The opt-in Docker test and CI use fresh credentials, isolated volumes, a random
 Compose project, and an ephemeral loopback HTTPS port. A **test-only** catalog
-override uses the existing ETL identity/S3 scope to execute DDL and creates the
-separate identity warehouse with ETL grants only. The test confirms the ordinary
+override uses the existing ETL identity/S3 scope to execute DDL; production
+bootstrap creates the separate identity warehouse with ETL grants only. The test confirms the ordinary
 Trino catalog service cannot access that warehouse. It never edits the committed
 runtime credentials or policies and removes its project/volumes on exit.
 

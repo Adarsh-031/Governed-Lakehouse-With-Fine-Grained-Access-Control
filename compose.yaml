@@ -270,6 +270,7 @@ services:
   ingest:
     <<: *catalog-client
     profiles: [etl]
+    user: "${INGEST_UID:-10001}:${INGEST_GID:-10001}"
     command: ["-m", "ingest.pipeline"]
     environment:
       ETL_OIDC_CLIENT_SECRET: ${ETL_OIDC_CLIENT_SECRET:?ETL OIDC secret is required}
@@ -279,6 +280,7 @@ services:
       HMAC_KEY_VERSION: ${HMAC_KEY_VERSION:?HMAC key version is required}
     volumes:
       - ${INGEST_SOURCE_DIR:-./data/raw/synthea/1000-seed42}:/source:ro
+      - ${INGEST_EVIDENCE_DIR:-./data/staged/issue17}:/evidence:rw
     depends_on:
       catalog-init:
         condition: service_completed_successfully
@@ -308,9 +310,22 @@ services:
       - ./docker/trino/auth/groups.txt:/etc/trino/auth/groups.txt:ro
       - ./docker/trino/access-control.properties:/etc/trino/access-control.properties:ro
       - ./policies/rules.json:/etc/trino/policies/rules.json:ro
-      - ${TRINO_PASSWORD_FILE:?Trino password file is required}:/etc/trino/auth/password.db:ro
-      - ${TRINO_TLS_PEM:?Trino TLS PEM is required}:/etc/trino/auth/trino.pem:ro
-      - ${TRINO_CA_BUNDLE:?Trino CA bundle is required}:/etc/trino/auth/ca.crt:ro
+      # Explicit bind type also accepts the generated data/secrets/... relative paths.
+      - type: bind
+        source: ${TRINO_PASSWORD_FILE:?Trino password file is required}
+        target: /etc/trino/auth/password.db
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${TRINO_TLS_PEM:?Trino TLS PEM is required}
+        target: /etc/trino/auth/trino.pem
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${TRINO_CA_BUNDLE:?Trino CA bundle is required}
+        target: /etc/trino/auth/ca.crt
+        read_only: true
+        bind: {create_host_path: false}
     read_only: true
     tmpfs:
       - /tmp:mode=1777

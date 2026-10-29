@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -43,3 +44,67 @@ def test_oidc_clients_require_individual_secrets_and_catalog_audience():
         assert client["standardFlowEnabled"] is False
         mapper = client["protocolMappers"][0]
         assert mapper["config"]["included.custom.audience"] == "lakekeeper"
+
+
+def test_identity_bootstrap_revokes_managed_reader_drift_and_is_rerunnable(monkeypatch):
+    monkeypatch.syspath_prepend(str(ROOT / "docker/catalog"))
+    import bootstrap
+
+    monkeypatch.setattr(bootstrap, "access_token", lambda service: service)
+    assignments = [
+        {"type": "select", "user": "trino"},
+        {"type": "describe", "user": "audit-writer"},
+    ]
+    calls = []
+
+    def management(method, path, token, **kwargs):
+        calls.append((method, path, kwargs))
+        if path == "warehouse":
+            return {
+                "warehouses": [
+                    {
+                        "name": "identity",
+                        "warehouse-id": "identity-id",
+                        "storage-profile": {**bootstrap.PROFILE, "key-prefix": "identity"},
+                    }
+                ]
+            }
+        if path == "user":
+            return {"id": token}
+        if method == "GET":
+            return {"assignments": list(assignments)}
+        for removed in kwargs["json"]["deletes"]:
+            assignments.remove(removed)
+        assignments.extend(kwargs["json"]["writes"])
+
+    monkeypatch.setattr(bootstrap, "management", management)
+    bootstrap.provision_warehouse("bootstrap", "identity", "identity", set())
+    assert assignments == [
+        {"type": relation, "user": "etl"} for relation in ("create", "describe", "modify", "select")
+    ]
+    calls.clear()
+    bootstrap.provision_warehouse("bootstrap", "identity", "identity", set())
+    assert not any(method == "POST" and path.endswith("/assignments") for method, path, _ in calls)
+
+
+def test_identity_bootstrap_rejects_wrong_storage_profile_before_grants(monkeypatch):
+    monkeypatch.syspath_prepend(str(ROOT / "docker/catalog"))
+    from unittest.mock import Mock
+
+    import bootstrap
+
+    management = Mock(
+        return_value={
+            "warehouses": [
+                {
+                    "name": "identity",
+                    "warehouse-id": "wrong",
+                    "storage-profile": {**bootstrap.PROFILE, "key-prefix": "silver"},
+                }
+            ]
+        }
+    )
+    monkeypatch.setattr(bootstrap, "management", management)
+    with pytest.raises(RuntimeError, match="different storage profile"):
+        bootstrap.provision_warehouse("bootstrap", "identity", "identity", set())
+    management.assert_called_once()

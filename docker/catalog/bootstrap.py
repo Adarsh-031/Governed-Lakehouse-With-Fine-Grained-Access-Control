@@ -24,8 +24,19 @@ def main():
     info = management("GET", "info", admin)
     if not info["bootstrapped"]:
         management("POST", "bootstrap", admin, json={"accept-terms-of-use": True}, expected=(204,))
+    for warehouse_name, prefix, trino_relations in (
+        (WAREHOUSE, "silver", {"describe", "select"}),
+        ("identity", "identity", set()),
+    ):
+        provision_warehouse(admin, warehouse_name, prefix, trino_relations)
+    print("PASS: authenticated bootstrap; hospital at silver/, restricted identity at identity/")
+    print("PASS: identity ETL only; clinical Trino read; credential vending disabled")
+
+
+def provision_warehouse(admin, warehouse_name, prefix, trino_relations):
+    profile = {**PROFILE, "key-prefix": prefix}
     warehouses = management("GET", "warehouse", admin)["warehouses"]
-    warehouse = next((w for w in warehouses if w["name"] == WAREHOUSE), None)
+    warehouse = next((w for w in warehouses if w["name"] == warehouse_name), None)
     if warehouse is None:
         warehouse = management(
             "POST",
@@ -33,9 +44,9 @@ def main():
             admin,
             expected=(201,),
             json={
-                "warehouse-name": WAREHOUSE,
+                "warehouse-name": warehouse_name,
                 "project-id": PROJECT,
-                "storage-profile": PROFILE,
+                "storage-profile": profile,
                 "storage-credential": {
                     "type": "s3",
                     "credential-type": "access-key",
@@ -46,14 +57,14 @@ def main():
         )
     else:
         actual = warehouse["storage-profile"]
-        if any(actual.get(key) != value for key, value in PROFILE.items()):
-            raise RuntimeError("Existing hospital warehouse has a different storage profile")
+        if any(actual.get(key) != value for key, value in profile.items()):
+            raise RuntimeError("Existing warehouse has a different storage profile")
     warehouse_id = warehouse["warehouse-id"]
     path = f"permissions/warehouse/{warehouse_id}/assignments"
     assignments = management("GET", path, admin)["assignments"]
     for service, relations in (
         ("etl", {"describe", "select", "create", "modify"}),
-        ("trino", {"describe", "select"}),
+        ("trino", trino_relations),
         ("audit-writer", set()),
     ):
         # Self-provisioning gets the verified OIDC subject from Lakekeeper itself.
@@ -72,8 +83,6 @@ def main():
             management(
                 "POST", path, admin, json={"writes": writes, "deletes": deletes}, expected=(204,)
             )
-    print("PASS: authenticated bootstrap; hospital warehouse at s3://warehouse/silver/")
-    print("PASS: ETL write, Trino read, audit-writer excluded; credential vending disabled")
 
 
 if __name__ == "__main__":

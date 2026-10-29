@@ -6,7 +6,8 @@ are runnable alongside Trino 476 with HTTPS password login and system file
 authorization. Docker acceptance tests cover Iceberg create/read, persistence,
 and synthetic row-filter/mask enforcement. Reproducible Synthea CSV generation
 and public MIMIC-IV demo acquisition are available. Synthea-to-silver Iceberg
-ingestion is runnable; clinical policies remain to be implemented. Silver and restricted identity DDL is available
+ingestion includes seeded care-team assignments, saved doctor patient sets, and
+ETL-only restricted identity; clinical policies remain to be implemented. DDL is available
 with isolated Trino/Iceberg acceptance coverage; see [schema setup](sql/schema/README.md).
 
 ## Goal
@@ -62,7 +63,7 @@ Keep necessary clinical identity data in a separately restricted identity table.
 - [x] Bring up private storage/catalog and authenticated Trino over TLS.
 - [x] Generate a reproducible 1k Synthea source sample and acquire the public MIMIC-IV demo.
 - [x] Load and validate patients, encounters, and charge-level claims.
-- [ ] Generate and load care_team assignments and restricted identity (#17).
+- [x] Generate and load care_team assignments and restricted identity (#17).
 - [ ] Restrict identities; implement doctor filters and researcher/billing masks.
 - [ ] Implement durable audit collection and query-ID reconciliation.
 - [ ] Implement positive access and negative bypass tests.

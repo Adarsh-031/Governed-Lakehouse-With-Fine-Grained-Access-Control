@@ -22,7 +22,7 @@ docker compose --env-file data/secrets/runtime.env run --rm --no-deps catalog-ch
 databases, Keycloak, OpenFGA database migrations, and Lakekeeper's database/
 authorization-model migrations. Lakekeeper uses its own built-in healthcheck.
 `catalog-init` uses a separate confidential OIDC bootstrap identity to initialize
-the server once, register the warehouse, provision service users, and reconcile
+the server once, register the hospital and restricted identity warehouses, provision service users, and reconcile
 their grants. Reruns preserve the warehouse ID, tables, and objects, check the
 existing storage profile, and restore the managed service grants. A plain
 `docker compose ... up -d` also runs the one-shot initializer; the opt-in
@@ -46,8 +46,10 @@ neither check jobs nor the catalog runtime receive storage root credentials.
   administrative `catalog-bootstrap`. Each uses its own generated
   `*_OIDC_CLIENT_SECRET`. Audience is `lakekeeper`; interactive/password grants
   are disabled for these clients.
-- ETL has warehouse `describe`, `select`, `create`, and `modify` grants. Trino
-  has only `describe` and `select`. The audit writer has no clinical warehouse
+- ETL has warehouse `describe`, `select`, `create`, and `modify` grants in both
+  `hospital` and `identity`. Identity uses its own storage profile at
+  `s3://warehouse/identity/` and has no Trino/audit-writer grants. Trino
+  has only `describe` and `select` in `hospital`. The audit writer has no clinical warehouse
   grants; a future audit warehouse needs its own storage profile and grants.
 
 The warehouse stores the scoped ETL S3 credential encrypted in catalog Postgres
@@ -61,8 +63,9 @@ trusted service grants do not implement hospital-user row filters or masks.
 
 The `silver/` root deliberately fits #11's existing prefix policies. A bucket-root
 warehouse would attempt unauthorized root operations and allow unwanted location
-choices. Gold/identity/audit storage domains require separate warehouse profiles
-and reviewed grants when added; no storage policy was broadened for this issue.
+choices. Issue #17 adds identity with its own profile and ETL-only managed grants;
+the existing ETL S3 scope already covered that prefix. Gold/audit domains still
+require separate profiles and reviewed grants. No S3 scope was broadened.
 
 ## Proof and persistence
 
