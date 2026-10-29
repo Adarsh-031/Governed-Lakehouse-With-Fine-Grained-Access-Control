@@ -66,3 +66,7 @@ def test_iceberg_uses_system_policy_and_scoped_service_credentials_over_https_on
     assert server["http-server.process-forwarded"] == "false"
     assert server["http-server.https.enabled"] == "true"
     assert server["http-server.authentication.type"] == "PASSWORD"
+    assert server["access-control.config-files"] == (
+        "/etc/trino/access-control.properties,/etc/trino/read-only.properties"
+    )
+    assert properties("docker/trino/read-only.properties") == {"access-control.name": "read-only"}

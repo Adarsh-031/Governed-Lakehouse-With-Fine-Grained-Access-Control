@@ -1,6 +1,541 @@
 {
-  "catalogs": [],
+  "catalogs": [
+    {
+      "user": "policy_care_team_reader",
+      "catalog": "hospital",
+      "allow": "read-only"
+    },
+    {
+      "user": "doctor_alice|doctor_bob",
+      "group": "doctor",
+      "catalog": "hospital",
+      "allow": "read-only"
+    },
+    {
+      "user": "researcher",
+      "group": "researcher",
+      "catalog": "hospital",
+      "allow": "read-only"
+    },
+    {
+      "user": "billing",
+      "group": "billing",
+      "catalog": "hospital",
+      "allow": "read-only"
+    },
+    {
+      "user": "admin",
+      "group": "admin",
+      "catalog": "hospital|audit",
+      "allow": "read-only"
+    },
+    {
+      "catalog": ".*",
+      "allow": "none"
+    }
+  ],
   "schemas": [],
-  "tables": [],
-  "impersonation": []
+  "tables": [
+    {
+      "user": "policy_care_team_reader",
+      "catalog": "hospital",
+      "schema": "silver",
+      "table": "care_team",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "$path",
+          "allow": false
+        },
+        {
+          "name": "$partition",
+          "allow": false
+        },
+        {
+          "name": "$file_modified_time",
+          "allow": false
+        }
+      ]
+    },
+    {
+      "user": "policy_care_team_reader",
+      "catalog": "hospital",
+      "schema": "silver",
+      "table": "patients",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "birthdate",
+          "allow": false
+        },
+        {
+          "name": "age_band",
+          "allow": false
+        },
+        {
+          "name": "sex",
+          "allow": false
+        },
+        {
+          "name": "race",
+          "allow": false
+        },
+        {
+          "name": "ethnicity",
+          "allow": false
+        },
+        {
+          "name": "zip",
+          "allow": false
+        },
+        {
+          "name": "$path",
+          "allow": false
+        },
+        {
+          "name": "$partition",
+          "allow": false
+        },
+        {
+          "name": "$file_modified_time",
+          "allow": false
+        }
+      ]
+    },
+    {
+      "user": "policy_care_team_reader",
+      "catalog": "hospital",
+      "schema": "silver",
+      "table": "encounters",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "encounter_id",
+          "allow": false
+        },
+        {
+          "name": "start_time",
+          "allow": false
+        },
+        {
+          "name": "stop_time",
+          "allow": false
+        },
+        {
+          "name": "encounter_class",
+          "allow": false
+        },
+        {
+          "name": "code",
+          "allow": false
+        },
+        {
+          "name": "description",
+          "allow": false
+        },
+        {
+          "name": "reason_code",
+          "allow": false
+        },
+        {
+          "name": "reason_description",
+          "allow": false
+        },
+        {
+          "name": "$path",
+          "allow": false
+        },
+        {
+          "name": "$partition",
+          "allow": false
+        },
+        {
+          "name": "$file_modified_time",
+          "allow": false
+        }
+      ]
+    },
+    {
+      "user": "doctor_alice",
+      "group": "doctor",
+      "catalog": "hospital",
+      "schema": "silver",
+      "table": "patients",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "$path",
+          "allow": false
+        },
+        {
+          "name": "$partition",
+          "allow": false
+        },
+        {
+          "name": "$file_modified_time",
+          "allow": false
+        }
+      ],
+      "filter": "EXISTS (SELECT 1 FROM hospital.silver.care_team AS ct WHERE ct.patient_token = patients.patient_token AND ct.doctor_user = 'doctor_alice' AND ct.valid_from <= CAST(current_timestamp AT TIME ZONE 'UTC' AS DATE) AND (ct.valid_to IS NULL OR CAST(current_timestamp AT TIME ZONE 'UTC' AS DATE) < ct.valid_to))",
+      "filter_environment": {
+        "user": "policy_care_team_reader"
+      }
+    },
+    {
+      "user": "doctor_bob",
+      "group": "doctor",
+      "catalog": "hospital",
+      "schema": "silver",
+      "table": "patients",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "$path",
+          "allow": false
+        },
+        {
+          "name": "$partition",
+          "allow": false
+        },
+        {
+          "name": "$file_modified_time",
+          "allow": false
+        }
+      ],
+      "filter": "EXISTS (SELECT 1 FROM hospital.silver.care_team AS ct WHERE ct.patient_token = patients.patient_token AND ct.doctor_user = 'doctor_bob' AND ct.valid_from <= CAST(current_timestamp AT TIME ZONE 'UTC' AS DATE) AND (ct.valid_to IS NULL OR CAST(current_timestamp AT TIME ZONE 'UTC' AS DATE) < ct.valid_to))",
+      "filter_environment": {
+        "user": "policy_care_team_reader"
+      }
+    },
+    {
+      "user": "doctor_alice",
+      "group": "doctor",
+      "catalog": "hospital",
+      "schema": "silver",
+      "table": "encounters",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "$path",
+          "allow": false
+        },
+        {
+          "name": "$partition",
+          "allow": false
+        },
+        {
+          "name": "$file_modified_time",
+          "allow": false
+        }
+      ],
+      "filter": "EXISTS (SELECT 1 FROM hospital.silver.care_team AS ct WHERE ct.patient_token = encounters.patient_token AND ct.doctor_user = 'doctor_alice' AND ct.valid_from <= CAST(current_timestamp AT TIME ZONE 'UTC' AS DATE) AND (ct.valid_to IS NULL OR CAST(current_timestamp AT TIME ZONE 'UTC' AS DATE) < ct.valid_to))",
+      "filter_environment": {
+        "user": "policy_care_team_reader"
+      }
+    },
+    {
+      "user": "doctor_bob",
+      "group": "doctor",
+      "catalog": "hospital",
+      "schema": "silver",
+      "table": "encounters",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "$path",
+          "allow": false
+        },
+        {
+          "name": "$partition",
+          "allow": false
+        },
+        {
+          "name": "$file_modified_time",
+          "allow": false
+        }
+      ],
+      "filter": "EXISTS (SELECT 1 FROM hospital.silver.care_team AS ct WHERE ct.patient_token = encounters.patient_token AND ct.doctor_user = 'doctor_bob' AND ct.valid_from <= CAST(current_timestamp AT TIME ZONE 'UTC' AS DATE) AND (ct.valid_to IS NULL OR CAST(current_timestamp AT TIME ZONE 'UTC' AS DATE) < ct.valid_to))",
+      "filter_environment": {
+        "user": "policy_care_team_reader"
+      }
+    },
+    {
+      "user": "researcher",
+      "group": "researcher",
+      "catalog": "hospital",
+      "schema": "silver",
+      "table": "patients",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "$path",
+          "allow": false
+        },
+        {
+          "name": "$partition",
+          "allow": false
+        },
+        {
+          "name": "$file_modified_time",
+          "allow": false
+        },
+        {
+          "name": "birthdate",
+          "allow": false
+        },
+        {
+          "name": "zip",
+          "mask": "CASE WHEN length(zip) IN (5, 10) AND regexp_like(zip, '^[0-9]{5}(-[0-9]{4})?$') THEN substr(zip, 1, 3) || '**' ELSE CAST(NULL AS VARCHAR) END"
+        }
+      ]
+    },
+    {
+      "user": "researcher",
+      "group": "researcher",
+      "catalog": "hospital",
+      "schema": "silver",
+      "table": "encounters",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "$path",
+          "allow": false
+        },
+        {
+          "name": "$partition",
+          "allow": false
+        },
+        {
+          "name": "$file_modified_time",
+          "allow": false
+        },
+        {
+          "name": "start_time",
+          "mask": "CAST(date_trunc('month', start_time) AS TIMESTAMP(6))"
+        },
+        {
+          "name": "stop_time",
+          "mask": "CAST(date_trunc('month', stop_time) AS TIMESTAMP(6))"
+        },
+        {
+          "name": "description",
+          "allow": false
+        },
+        {
+          "name": "reason_description",
+          "allow": false
+        }
+      ]
+    },
+    {
+      "user": "billing",
+      "group": "billing",
+      "catalog": "hospital",
+      "schema": "silver",
+      "table": "claims",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "$path",
+          "allow": false
+        },
+        {
+          "name": "$partition",
+          "allow": false
+        },
+        {
+          "name": "$file_modified_time",
+          "allow": false
+        },
+        {
+          "name": "procedure_description",
+          "allow": false
+        }
+      ]
+    },
+    {
+      "user": "admin",
+      "group": "admin",
+      "catalog": "hospital",
+      "schema": "silver",
+      "table": "patients",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "$path",
+          "allow": false
+        },
+        {
+          "name": "$partition",
+          "allow": false
+        },
+        {
+          "name": "$file_modified_time",
+          "allow": false
+        }
+      ]
+    },
+    {
+      "user": "admin",
+      "group": "admin",
+      "catalog": "hospital",
+      "schema": "silver",
+      "table": "encounters",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "$path",
+          "allow": false
+        },
+        {
+          "name": "$partition",
+          "allow": false
+        },
+        {
+          "name": "$file_modified_time",
+          "allow": false
+        }
+      ]
+    },
+    {
+      "user": "admin",
+      "group": "admin",
+      "catalog": "hospital",
+      "schema": "silver",
+      "table": "claims",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "$path",
+          "allow": false
+        },
+        {
+          "name": "$partition",
+          "allow": false
+        },
+        {
+          "name": "$file_modified_time",
+          "allow": false
+        }
+      ]
+    },
+    {
+      "user": "admin",
+      "group": "admin",
+      "catalog": "hospital",
+      "schema": "silver",
+      "table": "care_team",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "$path",
+          "allow": false
+        },
+        {
+          "name": "$partition",
+          "allow": false
+        },
+        {
+          "name": "$file_modified_time",
+          "allow": false
+        }
+      ]
+    },
+    {
+      "user": "admin",
+      "group": "admin",
+      "catalog": "audit",
+      "schema": "audit",
+      "table": "query_events",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "$path",
+          "allow": false
+        },
+        {
+          "name": "$partition",
+          "allow": false
+        },
+        {
+          "name": "$file_modified_time",
+          "allow": false
+        },
+        {
+          "name": "query_text_restricted",
+          "allow": false
+        }
+      ]
+    },
+    {
+      "privileges": []
+    }
+  ],
+  "impersonation": [],
+  "authorization": [],
+  "system_information": [],
+  "system_session_properties": [],
+  "catalog_session_properties": [],
+  "functions": [],
+  "procedures": [],
+  "queries": [
+    {
+      "user": "doctor_alice|doctor_bob",
+      "group": "doctor",
+      "allow": [
+        "execute"
+      ]
+    },
+    {
+      "user": "researcher",
+      "group": "researcher",
+      "allow": [
+        "execute"
+      ]
+    },
+    {
+      "user": "billing",
+      "group": "billing",
+      "allow": [
+        "execute"
+      ]
+    },
+    {
+      "user": "admin",
+      "group": "admin",
+      "allow": [
+        "execute"
+      ]
+    }
+  ]
 }

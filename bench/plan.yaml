@@ -1,6 +1,10 @@
 
 patient_counts: [1000, 10000, 100000]
 repetitions: 10
+policy_evidence:
+  command: uv run --locked python scripts/policy.py --experiment-dir results/raw/<run>/policy
+  required_files: [policy/policy-manifest.json, policy/rules.json]
+  required_fields: [policy_version, policy_digest, input_sha256, trino_version]
 metrics: [table_rows, stored_bytes, median_ms, p95_ms, cpu, memory, unauthorized_rows]
 controls:
   - Record hardware, image versions, dataset seed, snapshots, policy digest.

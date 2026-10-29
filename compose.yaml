@@ -309,6 +309,7 @@ services:
       - ./docker/trino/auth/group-provider.properties:/etc/trino/group-provider.properties:ro
       - ./docker/trino/auth/groups.txt:/etc/trino/auth/groups.txt:ro
       - ./docker/trino/access-control.properties:/etc/trino/access-control.properties:ro
+      - ./docker/trino/read-only.properties:/etc/trino/read-only.properties:ro
       - ./policies/rules.json:/etc/trino/policies/rules.json:ro
       # Explicit bind type also accepts the generated data/secrets/... relative paths.
       - type: bind

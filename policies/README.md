@@ -4,8 +4,10 @@
 decision per `(group, table, column)`, including denied tables.
 [schema-contract.yaml](schema-contract.yaml) fixes the proposed column inventory
 and SQL types for DDL (#15), classification (#6), ingestion (#16/#17), policy
-(#18), and access tests. Neither file is executed by Trino. The deployed
-[rules.json](rules.json) still grants no data access.
+(#18), and access tests. These inputs are explicitly compiled by
+[`scripts/policy.py`](../scripts/policy.py) into the deployed [rules.json](rules.json).
+Issue #18 implements the clinical contract; see [implementation](IMPLEMENTATION.md)
+and the [decisions and viva notes](../docs/issue-18.md).
 
 [pii_tags.yaml](../ingest/pii_tags.yaml) classifies every inventory column and
 records storage and per-role treatments that must match this matrix. See the
@@ -69,11 +71,13 @@ Access is based on the assignment **at query time**, includes the patient's
 history, and ends at expiry; it is not based on encounter date.
 
 Use existing `doctor_alice`/`doctor_bob` identities, replacing #17's placeholder
-`doctor_1/doctor_2`. A narrowly trusted filter-evaluation identity will need to
-read care_team, while `doctor_user` must still bind to the authenticated caller,
-not that evaluation identity. #18 must prove caller binding, nonrecursive
-evaluation, and both doctors' expected token sets. Direct doctor care-team
-enumeration stays denied; do not grant it to make the subquery work.
+`doctor_1/doctor_2`. A narrowly trusted filter-evaluation identity reads care_team.
+Trino 476 binds `current_user` to that evaluation identity inside a privileged
+filter, so the compiler emits an exact user-and-group rule for each doctor with
+a trusted doctor-login literal in this predicate. The internal reader has no
+password, interactive query grant, or impersonation grant. Acceptance tests
+compare both doctors' results with saved source-derived sets and independent
+boundary fixtures. Direct doctor care-team enumeration stays denied.
 
 ## Role decisions and reasons
 
@@ -153,9 +157,10 @@ remain trusted actors outside row/column isolation.
 
 Run `uv run --locked --group dev pytest tests/unit/test_access_matrix.py`.
 These tests validate specification coverage/consistency and audit-contract
-alignment, not runtime enforcement. #18 and later access/bypass tests must check
+alignment, not runtime enforcement. Issue #18's Docker acceptance checks
 separate users, boundary dates, forbidden column references, mask outputs/types,
-NULLs, joins, metadata, and time travel. YAML/CSV imply no automatic compiler.
+NULLs, joins, metadata, and time travel. YAML/CSV changes require explicit
+regeneration and review; run `uv run --locked python scripts/policy.py` to detect drift.
 Use the pinned [Trino 476 policy reference](https://github.com/trinodb/trino/blob/476/docs/src/main/sphinx/security/file-system-access-control.md)
 and [date/time reference](https://github.com/trinodb/trino/blob/476/docs/src/main/sphinx/functions/datetime.md)
 when translating masks/filters; review first-match and omitted-section defaults.
