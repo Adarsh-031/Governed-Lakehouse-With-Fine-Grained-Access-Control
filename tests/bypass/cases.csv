@@ -1,13 +1,13 @@
-
-case,expected,evidence,status
-anonymous_object_read,blocked,HTTP status and bucket policy,not_run
-catalog_direct_access,blocked,connection and authorization outcome,not_run
-doctor_other_patient,zero unauthorized rows,returned token set against oracle,not_run
-identity_impersonation,blocked,authentication and authorization logs,not_run
-bronze_query,blocked for ordinary users,query ID and error,not_run
-old_snapshot_query,no unauthorized identifiers,query ID and result inspection,not_run
-join_or_view_bypass,no additional access,query and result comparison,not_run
-metadata_enumeration,no sensitive leakage,metadata results,not_run
-aggregate_inference,residual risk measured,synthetic ground truth comparison,not_run
-quasi_identifier_linkage,residual risk measured,uniqueness and linkage rates,not_run
-audit_collector_outage,missing events quantified,known query ID reconciliation,not_run
+case,expected,evidence,status,follow_up
+anonymous_object_read,blocked,HTTP status and bucket policy,not_run,
+catalog_direct_access,blocked,connection and authorization outcome,not_run,
+doctor_other_patient,zero unauthorized rows,returned token set against oracle,not_run,
+identity_impersonation,blocked,authentication and authorization logs,not_run,
+admin_operations,blocked for all SQL users,query IDs and permission errors,not_run,
+bronze_query,blocked for ordinary users,query ID and error,not_run,
+old_snapshot_query,no unauthorized identifiers,query ID and result inspection,not_run,
+join_or_view_bypass,no additional access,query and result comparison,not_run,
+metadata_enumeration,no sensitive leakage,metadata results,not_run,
+aggregate_inference,residual risk measured,synthetic ground truth comparison,not_run,https://github.com/Adarsh-031/Governed-Lakehouse-With-Fine-Grained-Access-Control/issues/46
+quasi_identifier_linkage,residual risk measured,uniqueness and linkage rates,not_run,https://github.com/Adarsh-031/Governed-Lakehouse-With-Fine-Grained-Access-Control/issues/46
+audit_collector_outage,missing events quantified,known query ID reconciliation,not_run,

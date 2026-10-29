@@ -105,6 +105,11 @@ jobs:
           RUN_ACCESS_INTEGRATION: "1"
         run: uv run --no-sync pytest tests/access -v --strict-config --strict-markers --junitxml=access-test-results.xml
 
+      - name: Investigate every bypass case and retain private evidence
+        env:
+          RUN_BYPASS_INTEGRATION: "1"
+        run: uv run --no-sync pytest tests/bypass -v --strict-config --strict-markers --junitxml=bypass-test-results.xml
+
       - name: Verify silver and restricted identity DDL on Trino and Iceberg
         env:
           RUN_SCHEMA_INTEGRATION: "1"
