@@ -4,17 +4,18 @@ import os
 import secrets
 import shutil
 import subprocess
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
 
 from scripts.init_secrets import initialize
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
 
 
-@pytest.fixture
-def compose(tmp_path):
+@contextmanager
+def isolated_compose(tmp_path):
     directory = tmp_path / "secrets"
     previous_umask = os.umask(0o077)
     try:
@@ -101,3 +102,14 @@ def compose(tmp_path):
         yield run
     finally:
         run("down", "--volumes", "--remove-orphans")
+
+
+@pytest.fixture(scope="session")
+def compose_factory():
+    return isolated_compose
+
+
+@pytest.fixture
+def compose(tmp_path, compose_factory):
+    with compose_factory(tmp_path) as project:
+        yield project

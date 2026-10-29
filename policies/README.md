@@ -159,7 +159,11 @@ Run `uv run --locked --group dev pytest tests/unit/test_access_matrix.py`.
 These tests validate specification coverage/consistency and audit-contract
 alignment, not runtime enforcement. Issue #18's Docker acceptance checks
 separate users, boundary dates, forbidden column references, mask outputs/types,
-NULLs, joins, metadata, and time travel. YAML/CSV changes require explicit
+NULLs, joins, metadata, and time travel. Issue #19's independent
+[access suite](../tests/access/README.md) compares real authenticated results
+with saved #17 doctor sets, pre-write values and Python mask expectations;
+run `RUN_ACCESS_INTEGRATION=1 uv run --locked --group dev pytest tests/access -v`.
+YAML/CSV changes require explicit
 regeneration and review; run `uv run --locked python scripts/policy.py` to detect drift.
 Use the pinned [Trino 476 policy reference](https://github.com/trinodb/trino/blob/476/docs/src/main/sphinx/security/file-system-access-control.md)
 and [date/time reference](https://github.com/trinodb/trino/blob/476/docs/src/main/sphinx/functions/datetime.md)

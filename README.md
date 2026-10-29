@@ -64,6 +64,9 @@ Keep necessary clinical identity data in a separately restricted identity table.
    Run clinical checks with `RUN_POLICY_INTEGRATION=1 uv run --locked --group dev pytest tests/integration/test_policy.py -v`.
    See [policy implementation](policies/IMPLEMENTATION.md) and
    [issue #18 decisions/viva notes](docs/issue-18.md).
+   Verify the independent oracle with `RUN_ACCESS_INTEGRATION=1 uv run --locked
+   --group dev pytest tests/access -v`; see [access acceptance](tests/access/README.md)
+   and [issue #19 decisions](docs/issue-19.md).
 
 ## Build order
 - [x] Choose catalog implementation and pin service versions (ADR-001).
@@ -73,7 +76,8 @@ Keep necessary clinical identity data in a separately restricted identity table.
 - [x] Generate and load care_team assignments and restricted identity (#17).
 - [x] Restrict identities; implement doctor filters and researcher masks/billing projections (#18).
 - [ ] Implement durable audit collection and query-ID reconciliation.
-- [ ] Implement positive access and negative bypass tests.
+- [x] Verify authenticated access with independent doctor/mask oracles (#19).
+- [ ] Complete the broader bypass investigation and report.
 - [ ] Run scale and equivalent-output policy-overhead benchmarks.
 - [ ] Produce notebook, data card, threat model, bypass report, 3-5 page report.
 - [ ] Record 3-minute demo and prepare 8-10 minute presentation.
