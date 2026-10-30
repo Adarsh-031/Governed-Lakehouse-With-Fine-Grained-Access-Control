@@ -1,6 +1,7 @@
 """Private catalog endpoints and secret-safe request helpers."""
 
 import os
+import time
 
 import httpx
 
@@ -12,11 +13,22 @@ PROJECT = "00000000-0000-0000-0000-000000000000"
 
 def request(method, url, *, token=None, expected=(200,), **kwargs):
     headers = {"Authorization": f"Bearer {token}"} if token else {}
-    response = httpx.request(method, url, headers=headers, timeout=30, **kwargs)
-    if response.status_code not in expected:
+    # Safe GET retries cover brief dependency restarts (for example, Lakekeeper
+    # querying OpenFGA immediately after startup). Never retry state-changing calls.
+    retry_delays = (1, 2, 4, 8) if method.upper() == "GET" else ()
+    for attempt in range(len(retry_delays) + 1):
+        response = httpx.request(method, url, headers=headers, timeout=30, **kwargs)
+        if response.status_code in expected:
+            return response.json() if response.content else None
+        if (
+            method.upper() == "GET"
+            and response.status_code in {502, 503, 504}
+            and attempt < len(retry_delays)
+        ):
+            time.sleep(retry_delays[attempt])
+            continue
         # Never echo response bodies, request payloads, or Authorization headers.
         raise RuntimeError(f"{method} {url.split('?')[0]} returned HTTP {response.status_code}")
-    return response.json() if response.content else None
 
 
 def access_token(service):
