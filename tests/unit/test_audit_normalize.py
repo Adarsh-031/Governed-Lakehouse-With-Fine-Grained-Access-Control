@@ -15,7 +15,7 @@ def fixture(name):
     return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
 
 
-def test_created_event_is_running_and_sql_is_fingerprinted():
+def test_created_event_is_running_and_sql_is_redacted():
     event = fixture("created.json")
     record = normalize_event(
         event,
@@ -67,12 +67,15 @@ def test_authorization_denial_is_classified_separately():
     assert record["error_code"] == "PERMISSION_DENIED"
 
 
-@pytest.mark.parametrize(("query_state", "error_code", "expected"), [
-    ("FINISHED", None, "success"),
-    ("FAILED", "SYNTAX_ERROR", "sql_failure"),
-    ("FAILED", "PERMISSION_DENIED", "authorization_denial"),
-    ("CANCELED", None, "sql_failure"),
-])
+@pytest.mark.parametrize(
+    ("query_state", "error_code", "expected"),
+    [
+        ("FINISHED", None, "success"),
+        ("FAILED", "SYNTAX_ERROR", "sql_failure"),
+        ("FAILED", "PERMISSION_DENIED", "authorization_denial"),
+        ("CANCELED", None, "sql_failure"),
+    ],
+)
 def test_terminal_status_classification(query_state, error_code, expected):
     assert classify_status(query_state, error_code) == expected
 
@@ -137,3 +140,34 @@ def test_duplicate_delivery_timestamps_do_not_create_conflicts():
     )
     retry = dict(record, received_timestamp="2026-10-29T10:16:05Z")
     assert deduplicate_events([record, retry]) == [record]
+
+
+def test_conflicting_duplicate_is_quarantined_without_blocking_batch():
+    first = normalize_event(
+        fixture("completed_success.json"), received_timestamp="2026-10-29T10:16:00Z"
+    )
+    conflict = dict(first, output_rows_if_available=9)
+    other = normalize_event(fixture("created.json"), received_timestamp="2026-10-29T10:15:31Z")
+    quarantine = []
+    assert deduplicate_events([first, conflict, other], quarantine=quarantine) == [first, other]
+    assert quarantine == [conflict]
+
+
+def test_row_filters_and_masks_are_recorded_without_expressions():
+    event = fixture("completed_success.json")
+    table = event["metadata"]["tables"][0]
+    table["filters"] = ["patient_token IN (SELECT 'secret-literal')"]
+    table["columns"].append({"column": "zip", "mask": "substr(zip, 1, 3) || 'XX'"})
+    record = normalize_event(event, received_timestamp="2026-10-29T10:16:00Z")
+    assert record["row_filter_tables"] == ["hospital.silver.patients"]
+    assert record["masked_columns"] == ["hospital.silver.patients.zip"]
+    assert "secret-literal" not in str(record)
+    assert "substr" not in str(record)
+
+
+def test_unfiltered_unmasked_query_records_empty_enforcement():
+    record = normalize_event(
+        fixture("completed_success.json"), received_timestamp="2026-10-29T10:16:00Z"
+    )
+    assert record["row_filter_tables"] == []
+    assert record["masked_columns"] == []

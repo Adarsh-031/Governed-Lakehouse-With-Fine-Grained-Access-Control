@@ -11,8 +11,13 @@ a server, call Trino, write to object storage, or acknowledge HTTP deliveries.
 - Classify lifecycle and terminal status as `running`, `success`,
   `sql_failure`, or `authorization_denial`.
 - Deduplicate by `(query_id, event_type)`. Exact duplicate deliveries collapse;
-  conflicting records with the same key fail closed. A changed receive timestamp
-  alone does not create a conflict.
+  a conflicting record with the same key raises, or, when the caller passes a
+  `quarantine` list (the batch writer does), is moved there so one bad record
+  cannot block a batch. A changed receive timestamp alone is not a conflict.
+- Record policy enforcement as presence only: `row_filter_tables` lists tables
+  whose `TableInfo.filters` was non-empty and `masked_columns` lists
+  `catalog.schema.table.column` for every `ColumnInfo` with a mask. The filter
+  and mask expressions themselves are never stored.
 - Expose table and column identifiers when they match safe SQL identifier syntax.
 - Never persist query text, literal values, failure messages, stack traces, plans,
   client addresses, or arbitrary session settings. When SQL text exists, the
@@ -39,14 +44,14 @@ uv run --locked --group dev pytest tests/unit/test_audit_normalize.py -v
 
 Tests cover created/success/failure/authorization-denial mappings, output row
 counts, timestamp and identity validation, omission of sensitive failure/plan
-fields, SQL redaction, duplicate delivery, conflicting duplicate detection,
+fields, SQL redaction, duplicate delivery, conflicting duplicate detection and quarantine, row-filter/mask presence,
 and keeping created/completed event types distinct.
 
 ## Boundaries
 
-This is not yet a durable collector or a lossless audit pipeline. HTTP listener
-delivery, authentication, retry/backoff, durable spool, replay, batch writes,
-retention and query-ID reconciliation remain separate implementation work.
+This module is not itself a collector. Authenticated HTTP intake and the durable
+spool live in [collector.py](collector.py) (#20); batch writes to the Iceberg
+audit table, replay and retention are #21.
 Query events cannot prove which patients a user actually viewed, and output row
 counts do not prove that a client consumed results. Authentication failures need
 separate logging.

@@ -39,7 +39,7 @@
   },
   "failureInfo": {
     "errorCode": {
-      "code": 1,
+      "code": 47,
       "name": "COLUMN_NOT_FOUND",
       "type": "USER_ERROR"
     },

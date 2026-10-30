@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable, Mapping
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
@@ -41,12 +41,12 @@ def _optional_text(value: Any) -> str | None:
 def _iso_timestamp(value: Any, field: str) -> str:
     text = _required_text(value, field)
     try:
-        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(text)
     except ValueError as exc:
         raise AuditEventError(f"{field} must be an ISO-8601 timestamp") from exc
     if parsed.tzinfo is None:
         raise AuditEventError(f"{field} must include a timezone")
-    return parsed.astimezone(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+    return parsed.astimezone(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
 def _groups(context: Mapping[str, Any]) -> list[str]:
@@ -121,6 +121,38 @@ def _column_names(metadata: Mapping[str, Any], io_metadata: Mapping[str, Any]) -
     return sorted(names)
 
 
+def _policy_enforcement(metadata: Mapping[str, Any]) -> tuple[list[str], list[str]]:
+    """Return tables with a row filter and table.column names with a mask.
+
+    Trino 476 TableInfo.filters and ColumnInfo.mask carry the policy expressions,
+    which may contain literals, so only their presence is recorded.
+    """
+    filtered: set[str] = set()
+    masked: set[str] = set()
+    declared = metadata.get("tables", [])
+    if not isinstance(declared, list):
+        return [], []
+    for entry in declared:
+        if not isinstance(entry, Mapping):
+            continue
+        parts = [_optional_text(entry.get(key)) for key in ("catalog", "schema", "table")]
+        if not all(part and _IDENTIFIER.fullmatch(part) for part in parts):
+            continue
+        table = ".".join(parts)  # type: ignore[arg-type]
+        filters = entry.get("filters")
+        if isinstance(filters, list) and any(_optional_text(item) for item in filters):
+            filtered.add(table)
+        columns = entry.get("columns", [])
+        if isinstance(columns, list):
+            for column in columns:
+                if not isinstance(column, Mapping):
+                    continue
+                name = _optional_text(column.get("column"))
+                if name and _IDENTIFIER.fullmatch(name) and _optional_text(column.get("mask")):
+                    masked.add(f"{table}.{name}")
+    return sorted(filtered), sorted(masked)
+
+
 def _restricted_query_text(query: Any) -> str | None:
     """Discard SQL completely; even deterministic hashes can leak guessable literals."""
     return "[REDACTED]" if isinstance(query, str) and query else None
@@ -154,8 +186,9 @@ def normalize_event(
     """Normalize a Trino 476 QueryCreatedEvent or QueryCompletedEvent.
 
     Raw SQL, failure messages, stack traces, plans, client addresses and arbitrary
-    session properties are excluded. SQL is represented only by a SHA-256
-    fingerprint. Policy metadata is caller-supplied because native Trino events
+    session properties are excluded. SQL is represented only by the constant
+    ``[REDACTED]`` marker. Row-filter and mask expressions are never stored; only
+    which tables had a row filter and which columns were masked. Policy metadata is caller-supplied because native Trino events
     do not contain the deployed policy version or digest.
     """
     root = _mapping(event, "event")
@@ -170,6 +203,7 @@ def normalize_event(
     user = _required_text(context.get("user") or context.get("originalUser"), "context.user")
     restricted_query = _restricted_query_text(metadata.get("query"))
     io_metadata = _mapping(root.get("ioMetadata") or {}, "ioMetadata")
+    row_filter_tables, masked_columns = _policy_enforcement(metadata)
 
     if event_type == "QueryCreated":
         event_time = _iso_timestamp(root.get("createTime"), "createTime")
@@ -181,21 +215,17 @@ def normalize_event(
         if isinstance(failure, Mapping):
             failure_code = failure.get("errorCode")
             code_value = (
-                failure_code.get("name")
-                if isinstance(failure_code, Mapping)
-                else failure_code
+                failure_code.get("name") if isinstance(failure_code, Mapping) else failure_code
             )
             error_code = _optional_text(code_value)
         status = classify_status(metadata.get("queryState"), error_code)
         statistics = _mapping(root.get("statistics") or {}, "statistics")
         value = statistics.get("outputRows")
         output_rows = (
-            value
-            if isinstance(value, int) and not isinstance(value, bool) and value >= 0
-            else None
+            value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
         )
 
-    received = received_timestamp or datetime.now(timezone.utc).isoformat(timespec="microseconds")
+    received = received_timestamp or datetime.now(UTC).isoformat(timespec="microseconds")
     return {
         "query_id": query_id,
         "event_type": event_type,
@@ -204,6 +234,8 @@ def normalize_event(
         "query_text_restricted": restricted_query,
         "tables": _table_names(metadata, io_metadata),
         "columns": _column_names(metadata, io_metadata),
+        "row_filter_tables": row_filter_tables,
+        "masked_columns": masked_columns,
         "output_rows_if_available": output_rows,
         "status": status,
         "error_code": error_code,
@@ -214,10 +246,17 @@ def normalize_event(
     }
 
 
-def deduplicate_events(events: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+def deduplicate_events(
+    events: Iterable[Mapping[str, Any]],
+    *,
+    quarantine: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     """Collapse exact duplicates on (query_id, event_type), preserving order.
 
-    Conflicting contents fail closed instead of silently discarding a retry.
+    A retried delivery that differs only in ``received_timestamp`` is dropped.
+    A duplicate with different content is never silently discarded: when a
+    ``quarantine`` list is given it is appended there (so one bad record cannot
+    block a whole batch) and the first copy is kept; otherwise it raises.
     """
     result: list[dict[str, Any]] = []
     seen: dict[tuple[str, str], dict[str, Any]] = {}
@@ -231,12 +270,14 @@ def deduplicate_events(events: Iterable[Mapping[str, Any]]) -> list[dict[str, An
         if previous is None:
             seen[key] = record
             result.append(record)
-        elif {
-            name: value for name, value in previous.items() if name != "received_timestamp"
-        } != {
-            name: value for name, value in record.items() if name != "received_timestamp"
-        }:
-            raise AuditEventError(
-                f"conflicting duplicate for query_id={key[0]!r}, event_type={key[1]!r}"
-            )
+        elif _without_receipt(previous) != _without_receipt(record):
+            if quarantine is None:
+                raise AuditEventError(
+                    f"conflicting duplicate for query_id={key[0]!r}, event_type={key[1]!r}"
+                )
+            quarantine.append(record)
     return result
+
+
+def _without_receipt(record: Mapping[str, Any]) -> dict[str, Any]:
+    return {name: value for name, value in record.items() if name != "received_timestamp"}

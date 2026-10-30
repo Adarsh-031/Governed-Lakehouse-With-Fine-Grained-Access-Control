@@ -12,6 +12,8 @@
     "query_text_restricted",
     "tables",
     "columns",
+    "row_filter_tables",
+    "masked_columns",
     "output_rows_if_available",
     "status",
     "error_code",
@@ -41,6 +43,8 @@
     "query_text_restricted": "Always store [REDACTED] when native metadata.query is present; never persist raw SQL, deterministic SQL hashes, literals, failure messages, stack traces, plans, client addresses, or arbitrary session properties.",
     "policy_version": "Caller-supplied from the policy version active when the event was observed; null when unavailable.",
     "policy_digest": "Caller-supplied digest of the active policy; null when unavailable.",
+    "row_filter_tables": "Fully qualified tables whose metadata.tables[].filters was non-empty (a row filter was applied). Filter expressions are never stored.",
+    "masked_columns": "catalog.schema.table.column for every metadata.tables[].columns[] with a non-null mask. Mask expressions are never stored.",
     "output_rows_if_available": "QueryCompleted statistics.outputRows when it is a non-negative integer; null for QueryCreated or when unavailable.",
     "event_timestamp": "QueryCreated createTime or QueryCompleted endTime, normalized to UTC ISO-8601.",
     "received_timestamp": "Collector/normalizer receive time supplied by caller or current UTC time."

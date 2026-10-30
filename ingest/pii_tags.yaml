@@ -225,6 +225,16 @@ tables:
       treatment: keep
       roles: {doctor: drop, researcher: drop, billing: drop, admin: keep}
       rationale: "Selected fields can disclose clinical interests or actor activity; admin-only audit metadata."
+    row_filter_tables:
+      classification: quasi_identifier
+      treatment: keep
+      roles: {doctor: drop, researcher: drop, billing: drop, admin: keep}
+      rationale: "Which tables were row-filtered for a query; presence only, never the filter expression. Admin-only audit metadata."
+    masked_columns:
+      classification: quasi_identifier
+      treatment: keep
+      roles: {doctor: drop, researcher: drop, billing: drop, admin: keep}
+      rationale: "Which columns were masked for a query; presence only, never the mask expression. Admin-only audit metadata."
     output_rows_if_available:
       classification: quasi_identifier
       treatment: keep

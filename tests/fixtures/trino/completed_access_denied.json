@@ -39,7 +39,7 @@
   },
   "failureInfo": {
     "errorCode": {
-      "code": 10,
+      "code": 4,
       "name": "PERMISSION_DENIED",
       "type": "USER_ERROR"
     },

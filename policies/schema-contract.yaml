@@ -57,6 +57,8 @@ tables:
       query_text_restricted: VARCHAR
       tables: ARRAY(VARCHAR)
       columns: ARRAY(VARCHAR)
+      row_filter_tables: ARRAY(VARCHAR)
+      masked_columns: ARRAY(VARCHAR)
       output_rows_if_available: BIGINT
       status: VARCHAR
       error_code: VARCHAR
