@@ -50,8 +50,9 @@ and keeping created/completed event types distinct.
 ## Boundaries
 
 This module is not itself a collector. Authenticated HTTP intake and the durable
-spool live in [collector.py](collector.py) (#20); batch writes to the Iceberg
-audit table, replay and retention are #21.
+spool live in [collector.py](collector.py) (#20); the batch writer to the Iceberg
+audit table is [writer.py](writer.py) (#21, see [writer.md](writer.md)).
+Retention and an admin read path through Trino are not implemented.
 Query events cannot prove which patients a user actually viewed, and output row
 counts do not prove that a client consumed results. Authentication failures need
 separate logging.

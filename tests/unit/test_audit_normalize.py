@@ -171,3 +171,10 @@ def test_unfiltered_unmasked_query_records_empty_enforcement():
     )
     assert record["row_filter_tables"] == []
     assert record["masked_columns"] == []
+
+
+def test_epoch_second_timestamps_are_accepted():
+    event = fixture("created.json")
+    event["createTime"] = 1761733530.5
+    record = normalize_event(event, received_timestamp="2026-10-29T10:16:00Z")
+    assert record["event_timestamp"] == "2025-10-29T10:25:30.500000Z"

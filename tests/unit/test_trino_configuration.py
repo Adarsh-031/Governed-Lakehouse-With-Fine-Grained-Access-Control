@@ -30,13 +30,16 @@ def test_trino_is_the_only_published_service_and_receives_only_its_secrets():
         for name, service in config["services"].items()
         if name != "trino"
     )
+    # The ingest token only authenticates Trino's own event posts to the collector.
     assert set(trino["environment"]) == {
+        "AUDIT_INGEST_TOKEN",
         "TRINO_INTERNAL_SHARED_SECRET",
         "TRINO_OIDC_CLIENT_SECRET",
         "TRINO_STORAGE_ACCESS_KEY",
         "TRINO_STORAGE_SECRET_KEY",
     }
     assert trino["depends_on"]["catalog-init"]["condition"] == "service_completed_successfully"
+    assert trino["depends_on"]["audit-collector"]["condition"] == "service_healthy"
     assert trino["read_only"] is True
     assert all(
         mount.endswith(":ro") if isinstance(mount, str) else mount["read_only"]
@@ -70,3 +73,16 @@ def test_iceberg_uses_system_policy_and_scoped_service_credentials_over_https_on
         "/etc/trino/access-control.properties,/etc/trino/read-only.properties"
     )
     assert properties("docker/trino/read-only.properties") == {"access-control.name": "read-only"}
+    assert server["event-listener.config-files"] == "/etc/trino/http-event-listener.properties"
+    listener = properties("docker/trino/http-event-listener.properties")
+    assert listener["event-listener.name"] == "http"
+    assert listener["http-event-listener.log-created"] == "true"
+    assert listener["http-event-listener.log-completed"] == "true"
+    assert listener["http-event-listener.log-split"] == "false"
+    assert listener["http-event-listener.connect-ingest-uri"] == (
+        "http://audit-collector:8090/v1/events"
+    )
+    assert listener["http-event-listener.connect-http-headers"] == (
+        "Authorization:Bearer ${ENV:AUDIT_INGEST_TOKEN}"
+    )
+    assert int(listener["http-event-listener.connect-retry-count"]) > 0

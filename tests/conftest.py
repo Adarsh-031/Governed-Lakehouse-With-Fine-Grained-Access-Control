@@ -34,6 +34,12 @@ def isolated_compose(tmp_path):
         ("TRINO_CA_BUNDLE", "ca.crt"),
     ):
         values[variable] = str(directory / name)
+    # Collector and writer share a private host spool owned by the test runner.
+    audit_spool = tmp_path / "audit-spool"
+    audit_spool.mkdir(mode=0o700)
+    values["AUDIT_SPOOL_HOST_DIR"] = str(audit_spool)
+    values["AUDIT_UID"] = str(os.getuid())
+    values["AUDIT_GID"] = str(os.getgid())
     env_file.write_text("".join(f"{key}={value}\n" for key, value in values.items()))
     policy = tmp_path / "rules.json"
     shutil.copyfile(ROOT / "policies/rules.json", policy)
@@ -81,6 +87,9 @@ def isolated_compose(tmp_path):
                 "keycloak-db",
                 "openfga-db",
                 "storage",
+                "audit-collector",
+                "audit-writer",
+                "trino",
             ):
                 diagnostics = subprocess.run(
                     [*command, "logs", "--no-color", "--tail", "40", service],
@@ -108,6 +117,7 @@ def isolated_compose(tmp_path):
     run.policy = policy
     run.override_file = override
     run.ca = directory / "ca.crt"
+    run.audit_spool = audit_spool
     try:
         yield run
     finally:

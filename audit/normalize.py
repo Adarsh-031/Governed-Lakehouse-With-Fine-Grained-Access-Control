@@ -39,6 +39,11 @@ def _optional_text(value: Any) -> str | None:
 
 
 def _iso_timestamp(value: Any, field: str) -> str:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        # Jackson writes java.time.Instant as decimal epoch seconds when
+        # WRITE_DATES_AS_TIMESTAMPS is enabled; accept that form too.
+        parsed = datetime.fromtimestamp(value, UTC)
+        return parsed.isoformat(timespec="microseconds").replace("+00:00", "Z")
     text = _required_text(value, field)
     try:
         parsed = datetime.fromisoformat(text)
