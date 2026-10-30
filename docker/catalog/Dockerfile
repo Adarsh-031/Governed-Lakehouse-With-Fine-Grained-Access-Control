@@ -7,6 +7,7 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --locked --no-dev --no-editable --python /usr/local/bin/python
 COPY docker/catalog/*.py ./
 COPY ingest ./ingest
+COPY audit/__init__.py audit/collector.py ./audit/
 COPY scripts/source_data.py ./scripts/source_data.py
 USER 10001:10001
 ENTRYPOINT ["/app/.venv/bin/python"]

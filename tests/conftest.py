@@ -73,15 +73,25 @@ def isolated_compose(tmp_path):
         )
         output = result.stdout + result.stderr
         if expect_success and result.returncode != 0:
-            diagnostics = subprocess.run(
-                [*command, "logs", "--no-color", "--tail", "80", "trino"],
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=30,
-                env=environment,
-            )
-            output += diagnostics.stdout + diagnostics.stderr
+            for service in (
+                "catalog",
+                "keycloak",
+                "openfga",
+                "catalog-db",
+                "keycloak-db",
+                "openfga-db",
+                "storage",
+            ):
+                diagnostics = subprocess.run(
+                    [*command, "logs", "--no-color", "--tail", "40", service],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    env=environment,
+                )
+                output += f"\n--- {service} logs ---\n"
+                output += diagnostics.stdout + diagnostics.stderr
         for name, value in values.items():
             if name.startswith("TRINO_PASSWORD_") or name.endswith(
                 ("_PASSWORD", "_SECRET", "_SECRET_KEY", "_ACCESS_KEY", "_KEY", "_TOKEN")

@@ -89,7 +89,11 @@ class Access:
                 try:
                     rows = cursor.execute(sql).fetchall()
                 except TrinoQueryError as error:
-                    if error.error_name == "NO_NODES_AVAILABLE" and time.monotonic() < deadline:
+                    starting = error.error_name == "NO_NODES_AVAILABLE" or (
+                        error.error_name == "GENERIC_INTERNAL_ERROR"
+                        and "No nodes available" in (error.message or "")
+                    )
+                    if starting and time.monotonic() < deadline:
                         time.sleep(1)
                         continue
                     self.queries.append(

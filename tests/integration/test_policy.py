@@ -25,6 +25,16 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+def _workload_statements(path):
+    """Read a role SQL file as statements, omitting its line comments."""
+    sql = "\n".join(
+        line
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if not line.lstrip().startswith("--")
+    )
+    return [statement.strip() for statement in sql.split(";") if statement.strip()]
+
+
 def test_clinical_matrix_filters_masks_and_denials(compose, tmp_path):
     source = Path(os.environ.get("POLICY_TEST_SOURCE", ROOT / "tests/fixtures/synthea")).resolve()
     evidence = tmp_path / "evidence"
@@ -268,6 +278,30 @@ def test_clinical_matrix_filters_masks_and_denials(compose, tmp_path):
                     "SELECT * FROM TABLE(hospital.system.table_changes(schema_name => 'silver', table_name => 'patients', start_snapshot_id => 1, end_snapshot_id => 2))",
                 ):
                     execute(sql, user, denied=True)
+        # Execute each committed workload through the real Trino HTTPS endpoint
+        # using its own provisioned identity; collect result rows returned (not
+        # rows scanned) for review and the later benchmark issue.
+        workload_users = {
+            "doctor_alice": "doctor.sql",
+            "researcher": "researcher.sql",
+            "billing": "billing.sql",
+            "admin": "admin.sql",
+        }
+        workload_results = {}
+        for user, filename in workload_users.items():
+            statements = _workload_statements(ROOT / "sql/queries" / filename)
+            assert len(statements) == 4, f"{filename} should contain exactly four examples"
+            row_counts = []
+            for index, statement in enumerate(statements, start=1):
+                rows = execute(statement, user)
+                row_counts.append({"query": index, "result_rows": len(rows)})
+            workload_results[user] = {
+                "file": filename,
+                "query_count": len(statements),
+                "result_row_counts": row_counts,
+                "total_result_rows": sum(item["result_rows"] for item in row_counts),
+            }
+
         assert (
             query(client, "SELECT 1", user=READER, password=compose.values["TRINO_PASSWORD_ADMIN"])[
                 0
@@ -283,6 +317,8 @@ def test_clinical_matrix_filters_masks_and_denials(compose, tmp_path):
         "matrix_rows_verified": len(MATRIX),
         "doctor_counts": {doctor: len(tokens) for doctor, tokens in expected.items()},
         "boundary_date_utc": boundary["utc_date"],
+        "role_query_workloads": workload_results,
     }
-    (evidence / "policy-results.json").write_text(json.dumps(report))
+    (evidence / "policy-results.json").write_text(json.dumps(report, sort_keys=True) + "\n")
+    (evidence / "policy-results.json").chmod(0o600)
     print(json.dumps(report, sort_keys=True))

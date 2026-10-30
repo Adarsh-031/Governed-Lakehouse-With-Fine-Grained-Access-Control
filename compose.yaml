@@ -285,6 +285,32 @@ services:
       catalog-init:
         condition: service_completed_successfully
 
+  audit-collector:
+    <<: *catalog-client
+    # Receives Trino HTTP events on the internal network only; no host port.
+    user: "${AUDIT_UID:-10001}:${AUDIT_GID:-10001}"
+    entrypoint: ["/app/.venv/bin/python", "-m", "uvicorn"]
+    command:
+      - --factory
+      - audit.collector:create_app_from_environment
+      - --host=0.0.0.0
+      - --port=8090
+      - --no-access-log
+      - --no-server-header
+    environment:
+      AUDIT_INGEST_TOKEN: ${AUDIT_INGEST_TOKEN:?Audit ingest token is required}
+      AUDIT_SPOOL_DIR: /spool
+    volumes:
+      # Acknowledged events survive container restarts and rebuilds on the host.
+      - ${AUDIT_SPOOL_HOST_DIR:-./data/audit-spool}:/spool:rw
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/app/.venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/healthz', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+
   trino:
     image: trinodb/trino:476
     # Match the owner of the host's mode-0600 secret files without running as root.

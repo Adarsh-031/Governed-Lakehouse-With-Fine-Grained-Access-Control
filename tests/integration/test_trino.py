@@ -39,6 +39,12 @@ def query(client, sql, *, user="doctor_alice", password=None, headers=None, erro
         result = response.json()
         rows.extend(result.get("data", []))
     error = result.get("error", {}).get("errorName")
+    # Before workers announce their catalogs, Iceberg split scheduling can surface the
+    # same startup race as GENERIC_INTERNAL_ERROR "No nodes available"; let callers retry.
+    if error == "GENERIC_INTERNAL_ERROR" and "No nodes available" in (
+        result.get("error", {}).get("message") or ""
+    ):
+        error = "NO_NODES_AVAILABLE"
     if error_info is not None:
         error_info.update(result.get("error", {}))
     return 200, rows, error
