@@ -30,10 +30,10 @@ def test_authenticated_catalog_create_read_and_persistence(compose):
     # multi-service persistence test does not exhaust a shared self-hosted runner.
     compose.override_file.write_text(
         compose.override_file.read_text()
-        + "  keycloak:\\n"
-        + "    mem_limit: 768m\\n"
-        + "    environment:\\n"
-        + '      JAVA_OPTS_KC_HEAP: "-XX:MaxRAMPercentage=65 -XX:InitialRAMPercentage=15"\\n'
+        + "  keycloak:\n"
+        + "    mem_limit: 768m\n"
+        + "    environment:\n"
+        + '      JAVA_OPTS_KC_HEAP: "-XX:MaxRAMPercentage=65 -XX:InitialRAMPercentage=15"\n'
     )
     compose("build", "catalog-init")
     compose("up", "-d", "--wait", "catalog")
