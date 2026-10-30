@@ -3,8 +3,8 @@
   "trino_version": "476",
   "policy_digest": "3aae819ad48e8821b7d12912c381dfa4e0eaa170c5778a4a768ac3fe3f1b8063",
   "input_sha256": {
-    "policies/access-matrix.csv": "449e3cfeaff02e6afb10d14ff662a2a4ace1e17c0a9d33c1f98e39fc3d1de8f7",
-    "policies/schema-contract.yaml": "8c0a62868d93de84429496b08319b18a79255e1ccfaf929a0a7885aed083d0fc",
+    "policies/access-matrix.csv": "148b8d7622efb8323a1f391409f02b882a05b28eb61719c2a389e9823ec14604",
+    "policies/schema-contract.yaml": "e531846867cc4ede0303c6da047a42acb03c4207ff3b1a99a20b31374a912b03",
     "docker/trino/auth/groups.txt": "ea94ae449830f4488a6553aa061b111d1af137484e786fb2395500d461437bc9",
     "docker/trino/access-control.properties": "67109c3381a2bfb39aa2c2e025f101c1e6f06541fe05bb28e8f933a325e9474f",
     "docker/trino/read-only.properties": "293a8db1ed8c9ceb66819fd47d7db67fe56694ab7fa50f72bc79236080acbb41",

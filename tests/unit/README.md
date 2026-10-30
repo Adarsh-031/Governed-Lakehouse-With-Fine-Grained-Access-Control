@@ -18,3 +18,9 @@ complemented by the real-engine `tests/integration/test_policy.py` test.
 rejects leaked, missing, substituted, and duplicate rows. Its real-engine
 counterpart is `RUN_ACCESS_INTEGRATION=1 uv run --locked --group dev pytest
 tests/access -v`; see [access acceptance](../access/README.md).
+
+`test_audit_normalize.py` checks the Trino 476 query-created/completed event
+mapping, status classification, SQL/failure-data redaction, and deduplication
+without requiring Docker or a running Trino stack. Run it with
+`uv run --locked --group dev pytest tests/unit/test_audit_normalize.py -v`;
+see [audit normalization](../../audit/README.md).

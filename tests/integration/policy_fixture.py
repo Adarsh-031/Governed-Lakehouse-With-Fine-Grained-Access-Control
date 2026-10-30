@@ -148,6 +148,8 @@ def main():
             ("query_text_restricted", pa.large_string()),
             ("tables", pa.list_(pa.large_string())),
             ("columns", pa.list_(pa.large_string())),
+            ("row_filter_tables", pa.list_(pa.large_string())),
+            ("masked_columns", pa.list_(pa.large_string())),
             ("output_rows_if_available", pa.int64()),
             ("status", pa.large_string()),
             ("error_code", pa.large_string()),

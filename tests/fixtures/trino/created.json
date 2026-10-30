@@ -1,0 +1,34 @@
+{
+  "createTime": "2026-10-29T10:15:30.123Z",
+  "context": {
+    "user": "doctor_alice",
+    "originalUser": "doctor_alice",
+    "groups": [
+      "doctor"
+    ],
+    "serverVersion": "476"
+  },
+  "metadata": {
+    "queryId": "20261029_101530_00001_abcd1",
+    "query": "SELECT patient_token FROM hospital.silver.patients WHERE patient_token = 'synthetic-patient-42'",
+    "queryState": "QUEUED",
+    "tables": [
+      {
+        "catalog": "hospital",
+        "schema": "silver",
+        "table": "patients",
+        "authorization": "READ",
+        "filters": [],
+        "columns": [
+          {
+            "column": "patient_token",
+            "mask": null
+          }
+        ],
+        "directlyReferenced": true,
+        "viewText": null,
+        "referenceChain": []
+      }
+    ]
+  }
+}
