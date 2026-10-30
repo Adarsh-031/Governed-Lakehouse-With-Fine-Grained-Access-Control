@@ -31,9 +31,9 @@ def test_authenticated_catalog_create_read_and_persistence(compose):
     compose.override_file.write_text(
         compose.override_file.read_text()
         + "  keycloak:\n"
-        + "    mem_limit: 320m\n"
+        + "    mem_limit: 512m\n"
         + "    environment:\n"
-        + '      JAVA_OPTS_KC_HEAP: "-Xms64m -Xmx160m"\n'
+        + '      JAVA_OPTS_KC_HEAP: "-Xms128m -Xmx320m"\n'
         + "  catalog:\n"
         + "    mem_limit: 256m\n"
         + "  catalog-migrate:\n"
