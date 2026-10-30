@@ -35,11 +35,11 @@ def test_authenticated_catalog_create_read_and_persistence(compose):
         + "    environment:\n"
         + '      JAVA_OPTS_KC_HEAP: "-Xms128m -Xmx320m"\n'
         + "  catalog:\n"
-        + "    mem_limit: 256m\n"
+        + "    mem_limit: 384m\n"
         + "  catalog-migrate:\n"
         + "    mem_limit: 192m\n"
         + "  openfga:\n"
-        + "    mem_limit: 160m\n"
+        + "    mem_limit: 256m\n"
         + "  openfga-migrate:\n"
         + "    mem_limit: 128m\n"
         + "  storage:\n"
