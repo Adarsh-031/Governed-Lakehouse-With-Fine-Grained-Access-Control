@@ -25,35 +25,6 @@ def test_authenticated_catalog_create_read_and_persistence(compose):
         configuration["services"]["catalog"]["environment"]["LAKEKEEPER__AUTHZ_BACKEND"]
         == "openfga"
     )
-    # The persistence test starts Keycloak, Lakekeeper, OpenFGA, three
-    # Postgres instances and object storage together. Give these test-only
-    # containers bounded budgets so the shared self-hosted runner is not OOM-killed.
-    compose.override_file.write_text(
-        compose.override_file.read_text()
-        + "  keycloak:\n"
-        + "    mem_limit: 512m\n"
-        + "    environment:\n"
-        + '      JAVA_OPTS_KC_HEAP: "-Xms128m -Xmx320m"\n'
-        + "  catalog:\n"
-        + "    mem_limit: 384m\n"
-        + "  catalog-migrate:\n"
-        + "    mem_limit: 192m\n"
-        + "  openfga:\n"
-        + "    mem_limit: 256m\n"
-        + "  openfga-migrate:\n"
-        + "    mem_limit: 128m\n"
-        + "  storage:\n"
-        + "    mem_limit: 160m\n"
-        + "  catalog-db:\n"
-        + "    mem_limit: 160m\n"
-        + '    command: ["postgres", "-c", "shared_buffers=32MB", "-c", "max_connections=20"]\n'
-        + "  keycloak-db:\n"
-        + "    mem_limit: 160m\n"
-        + '    command: ["postgres", "-c", "shared_buffers=32MB", "-c", "max_connections=20"]\n'
-        + "  openfga-db:\n"
-        + "    mem_limit: 160m\n"
-        + '    command: ["postgres", "-c", "shared_buffers=32MB", "-c", "max_connections=20"]\n'
-    )
     compose("build", "catalog-init")
     compose("up", "-d", "--wait", "catalog")
     for _ in range(2):
