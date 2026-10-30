@@ -16,6 +16,10 @@ column visibility/masks remain enforced by Trino's filesystem access policy.
 
 Each query is preceded by comments identifying the role, purpose, and expected
 result columns. Queries use fully qualified `hospital.silver` table names.
+The Docker-backed `RUN_POLICY_INTEGRATION=1` acceptance test executes all four
+files as `doctor_alice`, `researcher`, `billing`, and `admin`, respectively, and
+prints/saves per-query result-row counts in its private `policy-results.json`
+evidence. These are result rows returned to the client, not rows scanned.
 
 ## Run examples
 

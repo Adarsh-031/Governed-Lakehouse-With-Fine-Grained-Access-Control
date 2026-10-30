@@ -34,10 +34,12 @@ GROUP BY date_trunc('month', start_time)
 ORDER BY encounter_month;
 
 -- R4. Patient counts by generalized ZIP prefix and demographic groups.
--- Purpose: Explore broad geography with the policy-masked ZIP value.
+-- Purpose: Explore broad geography with the policy-masked ZIP value while
+-- suppressing groups smaller than five to reduce small-cell disclosure risk.
 -- Expected columns: zip_prefix_masked, age_band, race, patient_count.
 SELECT zip AS zip_prefix_masked, age_band, race, count(*) AS patient_count
 FROM hospital.silver.patients
 GROUP BY zip, age_band, race
+HAVING count(*) >= 5
 ORDER BY patient_count DESC
 LIMIT 100;
