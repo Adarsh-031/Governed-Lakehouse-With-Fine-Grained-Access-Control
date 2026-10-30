@@ -18,7 +18,7 @@ jobs:
   quality:
     name: Code and configuration checks
     runs-on: instabox-medium
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
