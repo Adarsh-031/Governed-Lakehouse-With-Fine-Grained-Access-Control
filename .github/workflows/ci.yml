@@ -17,8 +17,8 @@ concurrency:
 jobs:
   quality:
     name: Code and configuration checks
-    runs-on: self-hosted
-    timeout-minutes: 15
+    runs-on: instabox-medium
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
