@@ -25,8 +25,6 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-
-
 def _workload_statements(path):
     """Read a role SQL file as statements, omitting its line comments."""
     sql = "\n".join(
