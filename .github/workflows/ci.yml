@@ -15,11 +15,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  quality:
-    name: Code and configuration checks
+  changes:
+    name: Detect code changes
     runs-on: instabox-medium
-    timeout-minutes: 30
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
 
+      - name: Skip CI when only Markdown or docs/ changed
+        id: diff
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          base=""
+          [ "$EVENT" = pull_request ] && base="$PR_BASE"
+          [ "$EVENT" = push ] && base="$PUSH_BEFORE"
+          if [ -z "$base" ] || [ "$base" = 0000000000000000000000000000000000000000 ] \
+            || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Docs-only = every changed file is Markdown (README etc.) or under docs/.
+          if git diff --name-only "$base" HEAD | grep -qvE '(^docs/|\.md$)'; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+            echo "Docs-only change: skipping checks and integration tests."
+          fi
+
+  quality:
+    name: Lint, syntax and unit tests
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: instabox-medium
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -76,51 +114,82 @@ jobs:
                   print(f"Valid YAML: {path}")
           PY
 
-      - name: Verify private storage and service permissions
-        env:
-          RUN_STORAGE_INTEGRATION: "1"
-        run: uv run --no-sync pytest tests/integration/test_storage.py -v --strict-config
-
-      - name: Verify authenticated catalog and Iceberg persistence
-        env:
-          RUN_CATALOG_INTEGRATION: "1"
-        run: uv run --no-sync pytest tests/integration/test_catalog.py -v --strict-config
-
-      - name: Verify Trino HTTPS authentication and system policy enforcement
-        env:
-          RUN_TRINO_INTEGRATION: "1"
-        run: uv run --no-sync pytest tests/integration/test_trino.py -v --strict-config
-
-      - name: Verify Trino query events reach the restricted audit table once
-        env:
-          RUN_AUDIT_INTEGRATION: "1"
-        run: uv run --no-sync pytest tests/integration/test_audit.py -v --strict-config
-
       - name: Run unit tests
         # Includes the schema/classification/access-contract drift checks.
         run: uv run --no-sync pytest tests/unit -v --strict-config --strict-markers --junitxml=unit-test-results.xml
 
-      - name: Verify clinical access matrix, doctor filters, masks and denials
-        env:
-          RUN_POLICY_INTEGRATION: "1"
-        run: uv run --no-sync pytest tests/integration/test_policy.py -v --strict-config
+  integration:
+    # Each suite starts its own isolated Compose stack, so they run in parallel.
+    name: Integration (${{ matrix.suite }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: instabox-medium
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: storage
+            flag: RUN_STORAGE_INTEGRATION
+            tests: tests/integration/test_storage.py
+          - suite: catalog
+            flag: RUN_CATALOG_INTEGRATION
+            tests: tests/integration/test_catalog.py
+          - suite: trino
+            flag: RUN_TRINO_INTEGRATION
+            tests: tests/integration/test_trino.py
+          - suite: audit
+            flag: RUN_AUDIT_INTEGRATION
+            tests: tests/integration/test_audit.py
+          - suite: policy
+            flag: RUN_POLICY_INTEGRATION
+            tests: tests/integration/test_policy.py
+          - suite: access
+            flag: RUN_ACCESS_INTEGRATION
+            tests: tests/access
+          - suite: bypass
+            flag: RUN_BYPASS_INTEGRATION
+            tests: tests/bypass
+          - suite: schema
+            flag: RUN_SCHEMA_INTEGRATION
+            tests: tests/integration/test_silver_schema.py
+          - suite: ingest
+            flag: RUN_INGEST_INTEGRATION
+            tests: tests/integration/test_ingestion.py
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
-      - name: Verify authenticated access with independent saved oracles
-        env:
-          RUN_ACCESS_INTEGRATION: "1"
-        run: uv run --no-sync pytest tests/access -v --strict-config --strict-markers --junitxml=access-test-results.xml
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
 
-      - name: Investigate every bypass case and retain private evidence
-        env:
-          RUN_BYPASS_INTEGRATION: "1"
-        run: uv run --no-sync pytest tests/bypass -v --strict-config --strict-markers --junitxml=bypass-test-results.xml
+      - name: Install Python
+        run: uv python install 3.11
 
-      - name: Verify silver and restricted identity DDL on Trino and Iceberg
-        env:
-          RUN_SCHEMA_INTEGRATION: "1"
-        run: uv run --no-sync pytest tests/integration/test_silver_schema.py -v --strict-config
+      - name: Install locked dependencies
+        run: uv sync --locked --group dev --python 3.11
 
-      - name: Verify trusted ETL ingestion and safe reruns on Iceberg
-        env:
-          RUN_INGEST_INTEGRATION: "1"
-        run: uv run --no-sync pytest tests/integration/test_ingestion.py -v --strict-config
+      - name: Run ${{ matrix.suite }} integration tests
+        # Env keys cannot be expressions, so the suite's opt-in flag is set here.
+        run: env "${{ matrix.flag }}=1" uv run --no-sync pytest ${{ matrix.tests }} -v --strict-config --strict-markers
+
+  gate:
+    # Keeps the branch-protection required check name. Passes when every job
+    # passed, or when checks were skipped for a docs-only change.
+    name: Code and configuration checks
+    if: always()
+    needs: [changes, quality, integration]
+    runs-on: instabox-medium
+    timeout-minutes: 5
+    steps:
+      - name: Require every job to pass or be skipped
+        shell: bash
+        run: |
+          test "${{ needs.changes.result }}" = success
+          for result in "${{ needs.quality.result }}" "${{ needs.integration.result }}"; do
+            [ "$result" = success ] || [ "$result" = skipped ] || exit 1
+          done
