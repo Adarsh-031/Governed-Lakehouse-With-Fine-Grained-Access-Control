@@ -119,3 +119,34 @@ jobs:
         env:
           RUN_INGEST_INTEGRATION: "1"
         run: uv run --no-sync pytest tests/integration/test_ingestion.py -v --strict-config
+
+  integration-smoke:
+    name: Disposable Docker stack smoke test
+    needs: quality
+    runs-on: instabox-medium
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install 3.11
+
+      - name: Install locked dependencies
+        run: uv sync --locked --group dev --python 3.11
+
+      - name: Verify Docker Engine and Compose
+        run: |
+          docker info >/dev/null
+          docker compose version
+
+      - name: Start disposable stack, query as admin, and tear down
+        run: bash scripts/ci_smoke.sh
