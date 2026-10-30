@@ -37,9 +37,10 @@ configuration and SDK exception messages are not copied because they can contain
 credentials. `--junitxml=...` provides normal pytest results.
 
 `blocked` means the tested boundary held, including an allowed query returning
-exactly the independently expected rows. `leaked` records unauthorized output or
-a demonstrated residual inference/linkage disclosure. `inconclusive` means an
-unexpected error, incomplete attempt, or missing dependency prevents a verdict.
+exactly the independently expected rows. `leaked` records unauthorized output,
+a demonstrated residual inference/linkage disclosure, or a measured audit-trail
+gap. `inconclusive` means an unexpected error, incomplete attempt, or missing
+dependency prevents a verdict.
 An unexecuted case stays `not_run` with a reason; it cannot become a pass.
 
 Unexpected SQL success or incorrect row results fail pytest. Known residual-risk
@@ -70,10 +71,11 @@ not establish identity. Rates use the whole population as denominator and report
 complete auxiliary rows and match precision separately. These toy-population
 measurements do not estimate real-world identification probability.
 
-The audit outage case records a known query ID but remains `inconclusive` until
-[#21](https://github.com/Adarsh-031/Governed-Lakehouse-With-Fine-Grained-Access-Control/issues/21)
-provides the real listener/collector/writer. The synthetic audit SQL fixture
-cannot demonstrate event delivery or quantify missing events.
+The `audit_collector_outage` case now exercises the real Trino listener, stops and
+restarts the collector during a known query workload, and reconciles query IDs against
+the audit table. It records coverage, missing lifecycle events, duplicates and outage
+boundaries in the private run directory. A missing event is retained as a measured audit
+gap; no fixed recovery percentage is assumed. See [issue #22](../../docs/issue-22.md).
 
 Unit regressions cover inventory completeness, private persistence, interrupted
 attempts, authorization versus infrastructure errors, and linkage scoring:

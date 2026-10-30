@@ -2,10 +2,14 @@
 
 import json
 import ssl
+import time
 from collections import Counter
+from datetime import UTC, datetime
 
 import httpx
 import pytest
+
+from audit.reliability import reconcile_query_events
 
 from tests.access.oracle import USERS, assert_rows, decisions, masked_value
 from tests.access.test_access import forbidden_operations
@@ -345,19 +349,109 @@ def quasi_identifier_linkage(attempt):
 
 
 def audit_collector_outage(attempt):
-    attempt.sql("SELECT 23", "researcher")
-    services = list(attempt.report.context["topology"]["services"])
-    listener = ROOT / "docker/trino/event-listener.properties"
-    attempt.observe(
-        services=services,
-        event_listener_configured=listener.exists(),
-        known_query_ids=[attempt.access.queries[-1]["query_id"]],
-        missing_events=None,
+    """Stop the real collector during a known workload and reconcile the audit table."""
+    compose = attempt.access.compose
+
+    def stored(query_ids):
+        output = compose(
+            "run", "--rm", "--no-deps", "audit-writer", "--summary", *query_ids
+        )
+        return json.loads(next(line for line in output.splitlines() if line.startswith("[")))
+
+    # Establish a working-path positive control before deliberately interrupting intake.
+    attempt.sql("SELECT 1", "researcher")
+    baseline_id = attempt.access.queries[-1]["query_id"]
+    assert baseline_id, "Trino did not return a baseline query ID"
+    deadline = time.monotonic() + 90
+    baseline_rows = []
+    baseline = {}
+    while time.monotonic() < deadline:
+        compose("run", "--rm", "--no-deps", "audit-writer", "--once")
+        baseline_rows = stored([baseline_id])
+        baseline = reconcile_query_events([baseline_id], baseline_rows)
+        if baseline["coverage_percent"] == 100.0:
+            break
+        time.sleep(3)
+    attempt.expect(
+        baseline.get("coverage_percent") == 100.0,
+        expected="Both QueryCreated and QueryCompleted are stored for the baseline query",
+        observed=baseline,
+        leak=False,
     )
-    attempt.row.update(
-        status="inconclusive",
-        reason="Blocked by open issue #21: no deployed collector, HTTP listener or batch writer exists. The audit SQL fixture is synthetic and cannot reconcile delivery or quantify outage loss.",
-    )
+
+    # Stop only the collector: Trino and the audit writer remain available, so
+    # queries continue while event delivery is interrupted.
+    compose("stop", "audit-collector")
+    outage_started = datetime.now(UTC).isoformat()
+    outage_ids = []
+    for statement in ("SELECT 23", "SELECT 24", "SELECT 25"):
+        attempt.sql(statement, "researcher")
+        query_id = attempt.access.queries[-1]["query_id"]
+        assert query_id, "Trino did not return a query ID during the collector outage"
+        outage_ids.append(query_id)
+    compose("up", "-d", "--wait", "audit-collector")
+    outage_ended = datetime.now(UTC).isoformat()
+
+    expected_ids = [baseline_id, *outage_ids]
+    deadline = time.monotonic() + 180
+    observed_rows = []
+    reconciliation = {}
+    while time.monotonic() < deadline:
+        compose("run", "--rm", "--no-deps", "audit-writer", "--once")
+        observed_rows = stored(expected_ids)
+        reconciliation = reconcile_query_events(expected_ids, observed_rows)
+        if (
+            reconciliation["coverage_percent"] == 100.0
+            and reconciliation["duplicate_event_count"] == 0
+        ):
+            break
+        time.sleep(5)
+
+    evidence = {
+        "case": "audit_collector_outage",
+        "measured_at_utc": datetime.now(UTC).isoformat(),
+        "outage_started_utc": outage_started,
+        "outage_ended_utc": outage_ended,
+        "issued_query_ids": expected_ids,
+        "observed_events": observed_rows,
+        **reconciliation,
+        "outage_behavior": {
+            "acknowledged_before_stop": (
+                "Baseline events were present before the collector was stopped."
+            ),
+            "during_stop": (
+                "The collector could not acknowledge deliveries; query execution "
+                "continued and the known query IDs were retained for reconciliation."
+            ),
+            "after_restart": (
+                "The same bind-mounted spool was reused. Only deliveries retried "
+                "successfully by Trino can be recovered; missing pairs remain visible."
+            ),
+        },
+    }
+    evidence_path = attempt.report.directory / "audit_collector_outage.json"
+    evidence_path.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n")
+    evidence_path.chmod(0o600)
+    attempt.observe(**evidence)
+
+    if reconciliation["missing_event_count"]:
+        attempt.row.update(
+            status="leaked",
+            reason=(
+                "The outage produced a measured audit-trail gap: "
+                f"{reconciliation['missing_event_count']} lifecycle event(s) missing "
+                f"across {len(reconciliation['missing_query_ids'])} query ID(s). "
+                "See private audit_collector_outage.json evidence."
+            ),
+        )
+    else:
+        attempt.row.update(
+            status="blocked",
+            reason=(
+                "All known queries have both lifecycle events after collector restart; "
+                "the audit writer stored no duplicate query/event pairs."
+            ),
+        )
 
 
 HANDLERS = {
@@ -377,6 +471,8 @@ HANDLERS = {
         audit_collector_outage,
     )
 }
+
+
 CASES = [row["case"] for row in load_cases()]
 if set(CASES) != set(HANDLERS):
     raise ValueError("Every cases.csv case must have exactly one bypass handler")

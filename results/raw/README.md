@@ -15,3 +15,13 @@ digest-verified policy rather than recompiling it during an experiment. Reports
 retain `not_run` for unexecuted cases and explicit reasons for incomplete work.
 Raw files can contain patient tokens and SQL literals; keep them private and
 use the aggregate [bypass report](../../docs/bypass-report.md) for discussion.
+
+## Audit reliability evidence
+
+The `audit_collector_outage` bypass case writes
+`audit_collector_outage.json` inside its private
+`bypass-<timestamp>-<id>/` run directory. It contains issued query IDs, observed
+audit rows, measured coverage, missing/duplicate counts and UTC outage boundaries.
+The stable inventory remains unchanged after execution; actual outcomes belong to
+the per-run evidence. Keep this evidence private because query identifiers reveal
+workload metadata.
