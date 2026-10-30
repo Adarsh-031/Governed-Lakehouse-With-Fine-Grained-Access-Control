@@ -90,7 +90,7 @@ def isolated_compose(tmp_path):
                     timeout=30,
                     env=environment,
                 )
-                output += f"\\n--- {service} logs ---\\n"
+                output += f"\n--- {service} logs ---\n"
                 output += diagnostics.stdout + diagnostics.stderr
         for name, value in values.items():
             if name.startswith("TRINO_PASSWORD_") or name.endswith(
