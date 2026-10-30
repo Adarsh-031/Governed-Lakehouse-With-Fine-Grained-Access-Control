@@ -1,4 +1,138 @@
-# Data card — issue #3
+# Data card
+
+
+
+## Data card summary and data-use statement
+
+**Primary governed workload: synthetic Synthea data only.** The shared
+hospital Silver tables are generated from Synthea v3.4.0, a simulator. The
+ETL entry point validates a Synthea 3.4.0 manifest and loads only that source.
+Care-team memberships are also generated deterministically for this project;
+they are not actual clinician/patient relationships. **No real patient data
+is used in the governed synthetic workload or its policy tests.**
+
+**Important distinction — optional MIMIC-IV Demo files.** The repository also
+provides an optional downloader for MIMIC-IV Clinical Database Demo v2.2. This
+is a 100-subject, de-identified clinical reference dataset derived from real
+clinical records; it is not synthetic. It is kept in its own
+`data/raw/mimic-iv-demo/2.2/` directory and is not accepted by the Synthea
+Silver-ingestion pipeline, joined to Synthea patients, or used as the
+governed synthetic benchmark workload. It may exist in a developer's local
+checkout after the optional download. Therefore, the no-real-patient-data
+statement applies to the governed Synthea workload, not to the separately
+downloadable de-identified MIMIC-IV reference sample. It would be inaccurate
+to describe every dataset obtainable from this repository as synthetic.
+
+| Card field | Summary |
+|---|---|
+| Primary data source | Synthea v3.4.0 synthetic patient histories |
+| Synthetic workload configuration | Massachusetts; patient seed 42; clinician/provider seed 42; reference/end date 2025-01-01 UTC; 10 years of exported history |
+| Optional reference source | MIMIC-IV Clinical Database Demo v2.2; 100 de-identified subjects; separate from the governed synthetic workload |
+| Governed Silver tables | patients, encounters, charge-level claims, care_team, and restricted identity |
+| Main transformations | Source patient IDs HMAC-tokenized; age bands derived from the fixed reference date; names placed in a separate restricted identity warehouse; care-team membership generated with a fixed seed |
+| Privacy posture | Pseudonymization and access controls reduce exposure; neither synthetic data nor de-identification proves anonymity |
+| Intended audience | Engineering, governance, security, and data-platform evaluation using synthetic data |
+| Clinical decision use | Not suitable for diagnosis, treatment, patient-specific decisions, or clinical deployment |
+
+### Intended and prohibited uses
+
+Intended uses are software engineering and controlled evaluation: testing
+CSV acquisition and integrity checks, schema/type validation, ETL and Iceberg
+read/write behavior, token consistency, Trino authorization rules, row
+filters, column masks, audit design, and repeatable synthetic workloads.
+The optional MIMIC-IV Demo subset may be used only as a separately governed,
+de-identified reference sample for format and acquisition checks in accordance
+with its PhysioNet terms; it is not a substitute for the synthetic benchmark.
+
+Do not use these data to make clinical decisions, diagnose or treat a person,
+estimate real-world disease prevalence or treatment effectiveness, make
+insurance or eligibility decisions, evaluate named individuals, or claim
+clinical validity or population representativeness. Do not attempt to
+re-identify MIMIC subjects, link MIMIC records to external identities, or
+combine the MIMIC and Synthea patient-ID domains. Do not expose raw exports,
+identity tables, HMAC keys, or pseudonymous membership oracles publicly.
+Any new use, especially model training or research conclusions, requires
+independent review of source terms, privacy risks, representativeness, and
+fitness for purpose.
+
+### Privacy and identifier handling
+
+Synthea records are simulated, but raw CSVs still contain names, source IDs,
+dates of birth, ZIP codes, and other attributes that resemble sensitive
+fields. Treat raw exports as restricted project data rather than assuming
+that "synthetic" means safe to publish. The current ETL derives a versioned
+HMAC token from the namespaced `synthea:` source patient ID; the HMAC key is
+provided at runtime and is never written to manifests or Git. The derived
+age band uses the manifest's fixed reference date. Names are written only to
+the separate ETL-only identity warehouse, not the shared patient inventory.
+The care-team table contains pseudonymous patient tokens and synthetic
+doctor-user assignments; its private expected-membership oracle is also
+sensitive linkage evidence. HMAC is pseudonymization, not anonymization.
+
+The MIMIC-IV Demo release is de-identified upstream, not simulated. Keep it
+separate from Synthea, retain its upstream license/README, use the published
+versioned checksums, and follow PhysioNet's data-use conditions. De-identification
+does not eliminate all linkage or inference risk.
+
+### Known biases and limitations
+
+- Synthea is a rule- and module-driven simulator, not a sample of the
+  population. Its default modules, demographic assumptions, coding choices,
+  generated encounters, and simulated payer/financial events may not match
+  clinical practice or any target population.
+- The fixed geography is Massachusetts and the configuration uses bundled
+  U.S. reference data. Results may not transfer to other regions, health
+  systems, populations, or payment arrangements.
+- A fixed seed makes a run reproducible under the pinned configuration; it
+  does not make the generated population statistically representative.
+- The MIMIC-IV Demo subset is only 100 de-identified subjects and is a
+  deliberately small clinical reference sample. Its dates/ages are subject
+  to de-identification transformations and must not be treated as ordinary
+  birthdates or as calendar-comparable dates across patients.
+- The two sources have different schemas and ID domains. There is no
+  validated patient-level crosswalk between them; combining them would
+  introduce invalid joins and unsupported conclusions.
+- Current source counts and ingestion acceptance do not establish benchmark
+  performance, privacy guarantees, fairness, or clinical validity.
+
+### Benchmark size and measurement status
+
+The available generation commands and benchmark plan define target Synthea
+populations of **1,000, 10,000, and 100,000** patients. Only the 1,000-patient
+seed-42 source and its Silver ingestion have acceptance evidence so far.
+The 10k and 100k generations/benchmarks have not been run for this work.
+
+| Measurement | Status |
+|---|---|
+| 1k source CSV row counts | Measured; see Local sample inventory |
+| 1k Silver table row counts | Measured; see Silver table inventory and ingestion evidence |
+| 10k / 100k generation and load sizes | TODO — benchmark not run |
+| Stored bytes per table / total warehouse size | TODO — measure during benchmark |
+| Query input/output bytes | TODO — measure during benchmark |
+| Median and p95 latency, cold and warm | TODO — measure during benchmark |
+| CPU and memory under repeated workloads | TODO — measure during benchmark |
+| Baseline versus policy-enforced overhead | TODO — measure equivalent outputs during benchmark |
+
+Do not infer storage footprint, scale capacity, latency, or policy overhead
+from source row counts. Record hardware, image versions, seed, table snapshots,
+policy digest, repetition count, and cache conditions with benchmark results,
+as specified in [the benchmark plan](../bench/plan.yaml).
+
+### Governed Silver table inventory
+
+Observed readback for the accepted 1,000-patient Synthea seed-42 load:
+
+| Silver table | Rows | Description |
+|---|---:|---|
+| `silver.patients` | 1,000 | Tokenized patient attributes and derived age band |
+| `silver.encounters` | 48,976 | Patient-linked encounter history |
+| `silver.claims` | 203,698 | Charge-level claim rows derived from transaction CHARGE records |
+| `silver.care_team` | 1,200 | Seeded synthetic doctor/patient assignments |
+| `identity.patient_identity` | 1,000 | Names in the separate restricted identity warehouse |
+
+These are observed row counts, not byte-size or performance measurements.
+Storage bytes, table sizes on disk, and the 10k/100k benchmark inventories
+remain TODO until the benchmark is run.
 
 ## Sources and purpose
 
@@ -186,8 +320,9 @@ adjustments are not extra charges or payer coverage. The single primary-payer
 label does not identify every insurer contributing to coverage. See the
 [mapping and retry decisions](../ingest/README.md#claims-grain-charge-lines-not-headers).
 No names/SSNs enter the shared patient inventory. Care-team/identity loading is
-now available in #17, below. Clinical SQL policies, MIMIC transformation, and
-larger-population memory/scale measurements remain separate work.
+now available in #17, below. Clinical SQL policies are now implemented by the reviewed policy in PR #44.
+MIMIC transformation remains outside the current Synthea ingestion pipeline;
+larger-population memory/scale measurements remain future benchmark work.
 
 ## Care-team and identity evidence (issue #17)
 
@@ -210,5 +345,5 @@ Names are assembled only from approved Synthea name components and stored with
 the same patient token in the separate ETL-only identity warehouse. Trino's
 catalog and object credentials were tested against populated identity metadata
 and Parquet and denied. These are synthetic memberships, not source-provider
-authorization or consent. SQL doctor filters and validity enforcement remain
-#18. See the [decisions and verification record](issue-17.md).
+authorization or consent. SQL doctor filters and validity enforcement are implemented by the reviewed
+clinical policy in PR #44. See the [decisions and verification record](issue-17.md).
