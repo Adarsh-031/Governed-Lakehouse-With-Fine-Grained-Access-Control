@@ -1,0 +1,427 @@
+{
+  "started_utc": "20261030T174823Z",
+  "git_commit": "1e5689a16dbf72b5e9008d6e2bd1f0a8d94fe0e9",
+  "hardware": {
+    "platform": "Linux-6.18.54-instabox-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "logical_cpus": 4,
+    "python": "3.11.18",
+    "cpu_model": "AMD EPYC",
+    "memory_total": "8155564 kB",
+    "docker_server": "28.0.4"
+  },
+  "repetitions": 10,
+  "seed": 42,
+  "baseline": "admin running the role SQL with the role's rules.json filter and masks inlined as subqueries; same Trino, same isolated benchmark project",
+  "cold_definition": "first execution of each query after restarting the Trino container; Silo/OS page cache is not dropped and no Trino file cache is configured",
+  "scales": {
+    "1000": {
+      "scale": 1000,
+      "source_parameters": {
+        "source": "synthea",
+        "version": "3.4.0",
+        "jar_sha256": "38678aab1e667d26671163824aad60ee5e30fa366f3d59d5ea5765ebb5702432",
+        "config_sha256": "06212811f8b234d9e465940f8ec65bdc866e0a462cf1f2601a77709b060d3cde",
+        "population": 1000,
+        "seed": 42,
+        "clinician_seed": 42,
+        "reference_date": "20250101",
+        "end_date": "20250101",
+        "state": "Massachusetts",
+        "overflow": false,
+        "timezone": "UTC"
+      },
+      "source_tables": {
+        "claims.csv": {
+          "rows": 83829,
+          "sha256": "956f3f124590e9d368758a5c0c9c95bb2d26af0ac1f3412517d66581257d5bed"
+        },
+        "claims_transactions.csv": {
+          "rows": 660227,
+          "sha256": "96c4b04a6727c9b6091f8746f9f6f4bb3db95afb75cc1aee4e0bda3d680c786b"
+        },
+        "encounters.csv": {
+          "rows": 48976,
+          "sha256": "3a5ab31cf054f9cdb8de6325d655685eddb00b0920021869a5e93148e7e4d922"
+        },
+        "organizations.csv": {
+          "rows": 780,
+          "sha256": "57214b00c4ad2a3784dfc771687d185775640ba77c91afb5d3176f00b9e64902"
+        },
+        "patients.csv": {
+          "rows": 1000,
+          "sha256": "c8fe59106d3dc633e7e0b7e5ae65a89750b4871069fcb173030ed29219fc8117"
+        },
+        "payers.csv": {
+          "rows": 10,
+          "sha256": "8528b1ac8dccdc86500e990e4f28e5c1211c2d91eee58cc13fa8eac39ac2ca49"
+        },
+        "providers.csv": {
+          "rows": 780,
+          "sha256": "a1a56f0917352e71fb01e5cdcf47d0bdb3e9bff0fa91cd2b0026c24d4a619b7c"
+        }
+      },
+      "ingest_seconds": 59.0,
+      "ingest_rows": {
+        "care_team": 1200,
+        "claims": 203698,
+        "encounters": 48976,
+        "identity": 1000,
+        "patients": 1000
+      },
+      "storage": {
+        "care_team": {
+          "data_files": 1,
+          "snapshot_id": 5686904227850000220,
+          "stored_bytes": 36902,
+          "table_rows": 1200
+        },
+        "claims": {
+          "data_files": 1,
+          "snapshot_id": 2301731309884908577,
+          "stored_bytes": 5599233,
+          "table_rows": 203698
+        },
+        "encounters": {
+          "data_files": 1,
+          "snapshot_id": 283466975602915321,
+          "stored_bytes": 1591205,
+          "table_rows": 48976
+        },
+        "patients": {
+          "data_files": 1,
+          "snapshot_id": 6645373824800726699,
+          "stored_bytes": 44088,
+          "table_rows": 1000
+        }
+      },
+      "trino_version": "476",
+      "images": [
+        {
+          "ID": "sha256:99445113a4a19e82dd3713c65bd9f6fb5bf972065ab043df8d1e1c93e957da9a",
+          "ContainerName": "lakehouse-test-dbeb34d8832a-keycloak-db-1",
+          "Repository": "postgres",
+          "Tag": "17.11-bookworm",
+          "Platform": "linux/amd64",
+          "Size": 437944456,
+          "LastTagTime": "0001-01-01T00:00:00Z"
+        },
+        {
+          "ID": "sha256:3ac2e44e50be550e041796465b344f6ea87db8e6a93626a693f610dcec112934",
+          "ContainerName": "lakehouse-test-dbeb34d8832a-storage-1",
+          "Repository": "pgsty/silo",
+          "Tag": "RELEASE.2026-09-03T13-18-01Z",
+          "Platform": "linux/amd64",
+          "Size": 159296392,
+          "LastTagTime": "0001-01-01T00:00:00Z"
+        },
+        {
+          "ID": "sha256:b7487948e7d042809cbf7b29558db37e633d1022b5e0322b0882c814572fd5d2",
+          "ContainerName": "lakehouse-test-dbeb34d8832a-openfga-1",
+          "Repository": "openfga/openfga",
+          "Tag": "v1.14.0",
+          "Platform": "linux/amd64",
+          "Size": 77809374,
+          "LastTagTime": "0001-01-01T00:00:00Z"
+        },
+        {
+          "ID": "sha256:d517a9717c1facc7c316dc8c3e073c9bf061ba4f701e4a07e8bd8d169f1beb9a",
+          "ContainerName": "lakehouse-test-dbeb34d8832a-catalog-migrate-1",
+          "Repository": "quay.io/lakekeeper/catalog",
+          "Tag": "v0.14.0",
+          "Platform": "linux/amd64",
+          "Size": 198135778,
+          "LastTagTime": "0001-01-01T00:00:00Z"
+        },
+        {
+          "ID": "sha256:b7487948e7d042809cbf7b29558db37e633d1022b5e0322b0882c814572fd5d2",
+          "ContainerName": "lakehouse-test-dbeb34d8832a-openfga-migrate-1",
+          "Repository": "openfga/openfga",
+          "Tag": "v1.14.0",
+          "Platform": "linux/amd64",
+          "Size": 77809374,
+          "LastTagTime": "0001-01-01T00:00:00Z"
+        },
+        {
+          "ID": "sha256:99445113a4a19e82dd3713c65bd9f6fb5bf972065ab043df8d1e1c93e957da9a",
+          "ContainerName": "lakehouse-test-dbeb34d8832a-catalog-db-1",
+          "Repository": "postgres",
+          "Tag": "17.11-bookworm",
+          "Platform": "linux/amd64",
+          "Size": 437944456,
+          "LastTagTime": "0001-01-01T00:00:00Z"
+        },
+        {
+          "ID": "sha256:469d050236bb5aa652a4ae97d5dbcf02c1af4c15bbb2ea088f7d30802f67fcf5",
+          "ContainerName": "lakehouse-test-dbeb34d8832a-keycloak-1",
+          "Repository": "quay.io/keycloak/keycloak",
+          "Tag": "26.0.7",
+          "Platform": "linux/amd64",
+          "Size": 431847871,
+          "LastTagTime": "0001-01-01T00:00:00Z"
+        },
+        {
+          "ID": "sha256:a39631139a9dad1c82e363b2f1c229de86250de189a13103c9657d57abe00f0c",
+          "ContainerName": "lakehouse-test-dbeb34d8832a-catalog-init-1",
+          "Repository": "governed-lakehouse-catalog-tools",
+          "Tag": "local",
+          "Platform": "linux/amd64",
+          "Size": 921203506,
+          "LastTagTime": "2026-10-30T17:48:33.396539414Z"
+        },
+        {
+          "ID": "sha256:3ac2e44e50be550e041796465b344f6ea87db8e6a93626a693f610dcec112934",
+          "ContainerName": "lakehouse-test-dbeb34d8832a-storage-init-1",
+          "Repository": "pgsty/silo",
+          "Tag": "RELEASE.2026-09-03T13-18-01Z",
+          "Platform": "linux/amd64",
+          "Size": 159296392,
+          "LastTagTime": "0001-01-01T00:00:00Z"
+        },
+        {
+          "ID": "sha256:d517a9717c1facc7c316dc8c3e073c9bf061ba4f701e4a07e8bd8d169f1beb9a",
+          "ContainerName": "lakehouse-test-dbeb34d8832a-catalog-1",
+          "Repository": "quay.io/lakekeeper/catalog",
+          "Tag": "v0.14.0",
+          "Platform": "linux/amd64",
+          "Size": 198135778,
+          "LastTagTime": "0001-01-01T00:00:00Z"
+        },
+        {
+          "ID": "sha256:99445113a4a19e82dd3713c65bd9f6fb5bf972065ab043df8d1e1c93e957da9a",
+          "ContainerName": "lakehouse-test-dbeb34d8832a-openfga-db-1",
+          "Repository": "postgres",
+          "Tag": "17.11-bookworm",
+          "Platform": "linux/amd64",
+          "Size": 437944456,
+          "LastTagTime": "0001-01-01T00:00:00Z"
+        },
+        {
+          "ID": "sha256:8a1c097f4a5d0ecf3c394aa9dcf64f023037f0dbaf4f58508e305978f6bc7e2d",
+          "ContainerName": "lakehouse-test-dbeb34d8832a-trino-1",
+          "Repository": "trinodb/trino",
+          "Tag": "476",
+          "Platform": "linux/amd64",
+          "Size": 1341803602,
+          "LastTagTime": "0001-01-01T00:00:00Z"
+        },
+        {
+          "ID": "sha256:a39631139a9dad1c82e363b2f1c229de86250de189a13103c9657d57abe00f0c",
+          "ContainerName": "lakehouse-test-dbeb34d8832a-audit-collector-1",
+          "Repository": "governed-lakehouse-catalog-tools",
+          "Tag": "local",
+          "Platform": "linux/amd64",
+          "Size": 921203506,
+          "LastTagTime": "2026-10-30T17:48:33.396539414Z"
+        }
+      ],
+      "queries_verified": 12,
+      "queries_total": 12,
+      "status": "run"
+    },
+    "10000": {
+      "scale": 10000,
+      "source_parameters": {
+        "source": "synthea",
+        "version": "3.4.0",
+        "jar_sha256": "38678aab1e667d26671163824aad60ee5e30fa366f3d59d5ea5765ebb5702432",
+        "config_sha256": "06212811f8b234d9e465940f8ec65bdc866e0a462cf1f2601a77709b060d3cde",
+        "population": 10000,
+        "seed": 42,
+        "clinician_seed": 42,
+        "reference_date": "20250101",
+        "end_date": "20250101",
+        "state": "Massachusetts",
+        "overflow": false,
+        "timezone": "UTC"
+      },
+      "source_tables": {
+        "claims.csv": {
+          "rows": 893298,
+          "sha256": "21369e575b9a802b5ad93c2c85f9d950311d34ccbfe1b9919c5ca768119d7183"
+        },
+        "claims_transactions.csv": {
+          "rows": 6979681,
+          "sha256": "b16a5ac8b12a0d0f38bf239c49ba0233c01c078a41e3c29992af1651316d0cff"
+        },
+        "encounters.csv": {
+          "rows": 529057,
+          "sha256": "f35184429b0d40c1e0078fd7e6d556c580fa2af855bccda626a8f45905563c42"
+        },
+        "organizations.csv": {
+          "rows": 1107,
+          "sha256": "dce3ae178897d2313d28e06fb38c2d17cc7996153e2366b3fc7265130fb853ad"
+        },
+        "patients.csv": {
+          "rows": 10000,
+          "sha256": "3bdd2836888f95a27283ca0857666181d75125319b221c9927af501796ec0f0b"
+        },
+        "payers.csv": {
+          "rows": 10,
+          "sha256": "642703bcec448d780960293c554297d917fd0f0f8a25f1c16f87099794e2b8f2"
+        },
+        "providers.csv": {
+          "rows": 1107,
+          "sha256": "6a8168e57b93076ab16f1f6b8e368a82eeddc5649d551bac36d82fa290b61e00"
+        }
+      },
+      "ingest_seconds": 113.0,
+      "ingest_rows": {
+        "care_team": 12000,
+        "claims": 2162698,
+        "encounters": 529057,
+        "identity": 10000,
+        "patients": 10000
+      },
+      "storage": {
+        "care_team": {
+          "data_files": 1,
+          "snapshot_id": 4769709358256631124,
+          "stored_bytes": 354701,
+          "table_rows": 12000
+        },
+        "claims": {
+          "data_files": 2,
+          "snapshot_id": 4228057953710800951,
+          "stored_bytes": 57207483,
+          "table_rows": 2162698
+        },
+        "encounters": {
+          "data_files": 1,
+          "snapshot_id": 7693880671414652829,
+          "stored_bytes": 15340114,
+          "table_rows": 529057
+        },
+        "patients": {
+          "data_files": 1,
+          "snapshot_id": 4408307603034929578,
+          "stored_bytes": 411741,
+          "table_rows": 10000
+        }
+      },
+      "trino_version": "476",
+      "images": [
+        {
+          "ID": "sha256:3ac2e44e50be550e041796465b344f6ea87db8e6a93626a693f610dcec112934",
+          "ContainerName": "lakehouse-test-aa3d8d459587-storage-init-1",
+          "Repository": "pgsty/silo",
+          "Tag": "RELEASE.2026-09-03T13-18-01Z",
+          "Platform": "linux/amd64",
+          "Size": 159296392,
+          "LastTagTime": "0001-01-01T00:00:00Z"
+        },
+        {
+          "ID": "sha256:3ac2e44e50be550e041796465b344f6ea87db8e6a93626a693f610dcec112934",
+          "ContainerName": "lakehouse-test-aa3d8d459587-storage-1",
+          "Repository": "pgsty/silo",
+          "Tag": "RELEASE.2026-09-03T13-18-01Z",
+          "Platform": "linux/amd64",
+          "Size": 159296392,
+          "LastTagTime": "0001-01-01T00:00:00Z"
+        },
+        {
+          "ID": "sha256:d517a9717c1facc7c316dc8c3e073c9bf061ba4f701e4a07e8bd8d169f1beb9a",
+          "ContainerName": "lakehouse-test-aa3d8d459587-catalog-migrate-1",
+          "Repository": "quay.io/lakekeeper/catalog",
+          "Tag": "v0.14.0",
+          "Platform": "linux/amd64",
+          "Size": 198135778,
+          "LastTagTime": "0001-01-01T00:00:00Z"
+        },
+        {
+          "ID": "sha256:b7487948e7d042809cbf7b29558db37e633d1022b5e0322b0882c814572fd5d2",
+          "ContainerName": "lakehouse-test-aa3d8d459587-openfga-1",
+          "Repository": "openfga/openfga",
+          "Tag": "v1.14.0",
+          "Platform": "linux/amd64",
+          "Size": 77809374,
+          "LastTagTime": "0001-01-01T00:00:00Z"
+        },
+        {
+          "ID": "sha256:a39631139a9dad1c82e363b2f1c229de86250de189a13103c9657d57abe00f0c",
+          "ContainerName": "lakehouse-test-aa3d8d459587-catalog-init-1",
+          "Repository": "governed-lakehouse-catalog-tools",
+          "Tag": "local",
+          "Platform": "linux/amd64",
+          "Size": 921203506,
+          "LastTagTime": "2026-10-30T17:51:33.473380566Z"
+        },
+        {
+          "ID": "sha256:b7487948e7d042809cbf7b29558db37e633d1022b5e0322b0882c814572fd5d2",
+          "ContainerName": "lakehouse-test-aa3d8d459587-openfga-migrate-1",
+          "Repository": "openfga/openfga",
+          "Tag": "v1.14.0",
+          "Platform": "linux/amd64",
+          "Size": 77809374,
+          "LastTagTime": "0001-01-01T00:00:00Z"
+        },
+        {
+          "ID": "sha256:a39631139a9dad1c82e363b2f1c229de86250de189a13103c9657d57abe00f0c",
+          "ContainerName": "lakehouse-test-aa3d8d459587-audit-collector-1",
+          "Repository": "governed-lakehouse-catalog-tools",
+          "Tag": "local",
+          "Platform": "linux/amd64",
+          "Size": 921203506,
+          "LastTagTime": "2026-10-30T17:51:33.473380566Z"
+        },
+        {
+          "ID": "sha256:469d050236bb5aa652a4ae97d5dbcf02c1af4c15bbb2ea088f7d30802f67fcf5",
+          "ContainerName": "lakehouse-test-aa3d8d459587-keycloak-1",
+          "Repository": "quay.io/keycloak/keycloak",
+          "Tag": "26.0.7",
+          "Platform": "linux/amd64",
+          "Size": 431847871,
+          "LastTagTime": "0001-01-01T00:00:00Z"
+        },
+        {
+          "ID": "sha256:d517a9717c1facc7c316dc8c3e073c9bf061ba4f701e4a07e8bd8d169f1beb9a",
+          "ContainerName": "lakehouse-test-aa3d8d459587-catalog-1",
+          "Repository": "quay.io/lakekeeper/catalog",
+          "Tag": "v0.14.0",
+          "Platform": "linux/amd64",
+          "Size": 198135778,
+          "LastTagTime": "0001-01-01T00:00:00Z"
+        },
+        {
+          "ID": "sha256:8a1c097f4a5d0ecf3c394aa9dcf64f023037f0dbaf4f58508e305978f6bc7e2d",
+          "ContainerName": "lakehouse-test-aa3d8d459587-trino-1",
+          "Repository": "trinodb/trino",
+          "Tag": "476",
+          "Platform": "linux/amd64",
+          "Size": 1341803602,
+          "LastTagTime": "0001-01-01T00:00:00Z"
+        },
+        {
+          "ID": "sha256:99445113a4a19e82dd3713c65bd9f6fb5bf972065ab043df8d1e1c93e957da9a",
+          "ContainerName": "lakehouse-test-aa3d8d459587-catalog-db-1",
+          "Repository": "postgres",
+          "Tag": "17.11-bookworm",
+          "Platform": "linux/amd64",
+          "Size": 437944456,
+          "LastTagTime": "0001-01-01T00:00:00Z"
+        },
+        {
+          "ID": "sha256:99445113a4a19e82dd3713c65bd9f6fb5bf972065ab043df8d1e1c93e957da9a",
+          "ContainerName": "lakehouse-test-aa3d8d459587-openfga-db-1",
+          "Repository": "postgres",
+          "Tag": "17.11-bookworm",
+          "Platform": "linux/amd64",
+          "Size": 437944456,
+          "LastTagTime": "0001-01-01T00:00:00Z"
+        },
+        {
+          "ID": "sha256:99445113a4a19e82dd3713c65bd9f6fb5bf972065ab043df8d1e1c93e957da9a",
+          "ContainerName": "lakehouse-test-aa3d8d459587-keycloak-db-1",
+          "Repository": "postgres",
+          "Tag": "17.11-bookworm",
+          "Platform": "linux/amd64",
+          "Size": 437944456,
+          "LastTagTime": "0001-01-01T00:00:00Z"
+        }
+      ],
+      "queries_verified": 12,
+      "queries_total": 12,
+      "status": "run"
+    }
+  }
+}

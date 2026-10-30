@@ -1,0 +1,14 @@
+scale,role,query_id,enforced_rows,baseline_rows,fingerprints_match,unauthorized_rows
+1000,doctor,D1,28506,28506,True,0
+1000,doctor,D2,9,9,True,0
+1000,doctor,D3,20,20,True,0
+1000,doctor,D4,478,478,True,0
+1000,researcher,R1,20,20,True,0
+1000,researcher,R2,72,72,True,0
+1000,researcher,R3,926,926,True,0
+1000,researcher,R4,59,59,True,0
+1000,billing,B1,10,10,True,0
+1000,billing,B2,869,869,True,0
+1000,billing,B3,95991,95991,True,0
+1000,billing,B4,203698,203698,True,0
+
