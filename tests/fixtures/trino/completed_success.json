@@ -1,0 +1,66 @@
+{
+  "metadata": {
+    "queryId": "20261029_101530_00001_abcd1",
+    "query": "SELECT patient_token FROM hospital.silver.patients WHERE patient_token = 'synthetic-patient-42'",
+    "queryState": "FINISHED",
+    "tables": [
+      {
+        "catalog": "hospital",
+        "schema": "silver",
+        "table": "patients",
+        "authorization": "READ",
+        "filters": [],
+        "columns": [
+          {
+            "column": "patient_token",
+            "mask": null
+          }
+        ],
+        "directlyReferenced": true,
+        "viewText": null,
+        "referenceChain": []
+      }
+    ]
+  },
+  "statistics": {
+    "outputRows": 1
+  },
+  "context": {
+    "user": "doctor_alice",
+    "originalUser": "doctor_alice",
+    "groups": [
+      "doctor"
+    ],
+    "serverVersion": "476"
+  },
+  "ioMetadata": {
+    "inputs": [
+      {
+        "connectorName": "iceberg",
+        "catalogName": "hospital",
+        "catalogVersion": {
+          "version": "test"
+        },
+        "schema": "silver",
+        "table": "patients",
+        "columns": [
+          {
+            "name": "patient_token",
+            "type": "varchar"
+          }
+        ],
+        "connectorInfo": null,
+        "connectorMetrics": {
+          "metrics": {}
+        },
+        "physicalInputBytes": null,
+        "physicalInputRows": null
+      }
+    ],
+    "output": null
+  },
+  "failureInfo": null,
+  "createTime": "2026-10-29T10:15:30.123Z",
+  "executionStartTime": "2026-10-29T10:15:30.200Z",
+  "endTime": "2026-10-29T10:15:30.450Z"
+}

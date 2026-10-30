@@ -1,0 +1,53 @@
+{
+  "metadata": {
+    "queryId": "20261029_101600_00002_abcd1",
+    "query": "SELECT missing_column FROM hospital.silver.patients",
+    "queryState": "FAILED",
+    "tables": [
+      {
+        "catalog": "hospital",
+        "schema": "silver",
+        "table": "patients",
+        "authorization": "READ",
+        "filters": [],
+        "columns": [
+          {
+            "column": "missing_column",
+            "mask": null
+          }
+        ],
+        "directlyReferenced": true,
+        "viewText": null,
+        "referenceChain": []
+      }
+    ]
+  },
+  "statistics": {
+    "outputRows": 0
+  },
+  "context": {
+    "user": "researcher",
+    "originalUser": "researcher",
+    "groups": [
+      "researcher"
+    ],
+    "serverVersion": "476"
+  },
+  "ioMetadata": {
+    "inputs": [],
+    "output": null
+  },
+  "failureInfo": {
+    "errorCode": {
+      "code": 1,
+      "name": "COLUMN_NOT_FOUND",
+      "type": "USER_ERROR"
+    },
+    "failureType": "USER_ERROR",
+    "failureMessage": "Column 'missing_column' cannot be resolved",
+    "failuresJson": "contains stack trace"
+  },
+  "createTime": "2026-10-29T10:16:00Z",
+  "executionStartTime": "2026-10-29T10:16:00.1Z",
+  "endTime": "2026-10-29T10:16:00.2Z"
+}

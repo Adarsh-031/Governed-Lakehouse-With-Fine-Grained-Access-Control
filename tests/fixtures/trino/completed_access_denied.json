@@ -1,0 +1,53 @@
+{
+  "metadata": {
+    "queryId": "20261029_101700_00003_abcd1",
+    "query": "SELECT birthdate FROM hospital.silver.patients",
+    "queryState": "FAILED",
+    "tables": [
+      {
+        "catalog": "hospital",
+        "schema": "silver",
+        "table": "patients",
+        "authorization": "READ",
+        "filters": [],
+        "columns": [
+          {
+            "column": "birthdate",
+            "mask": null
+          }
+        ],
+        "directlyReferenced": true,
+        "viewText": null,
+        "referenceChain": []
+      }
+    ]
+  },
+  "statistics": {
+    "outputRows": 0
+  },
+  "context": {
+    "user": "researcher",
+    "originalUser": "researcher",
+    "groups": [
+      "researcher"
+    ],
+    "serverVersion": "476"
+  },
+  "ioMetadata": {
+    "inputs": [],
+    "output": null
+  },
+  "failureInfo": {
+    "errorCode": {
+      "code": 10,
+      "name": "PERMISSION_DENIED",
+      "type": "USER_ERROR"
+    },
+    "failureType": "USER_ERROR",
+    "failureMessage": "Access denied to column",
+    "failuresJson": "contains stack trace"
+  },
+  "createTime": "2026-10-29T10:17:00Z",
+  "executionStartTime": "2026-10-29T10:17:00.1Z",
+  "endTime": "2026-10-29T10:17:00.2Z"
+}

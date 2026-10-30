@@ -1,5 +1,5 @@
 {
-  "description": "Proposed normalized record, not the native Trino event schema.",
+  "description": "Normalized Trino 476 query lifecycle record contract. Native event payloads are mapped by audit/normalize.py.",
   "deduplication_key": [
     "query_id",
     "event_type"
@@ -24,6 +24,35 @@
     "Query events do not enumerate all patients returned.",
     "Authentication failures need separate logging.",
     "Output rows do not prove the client viewed the result.",
-    "Validate available fields against the pinned release."
-  ]
+    "Trino event SPI JSON serialization is unstable across versions; revalidate against the pinned release before upgrading.",
+    "Policy version/digest are not native event fields and must be supplied by the collector."
+  ],
+  "status_values": [
+    "running",
+    "success",
+    "sql_failure",
+    "authorization_denial"
+  ],
+  "event_types": [
+    "QueryCreated",
+    "QueryCompleted"
+  ],
+  "field_semantics": {
+    "query_text_restricted": "Always store [REDACTED] when native metadata.query is present; never persist raw SQL, deterministic SQL hashes, literals, failure messages, stack traces, plans, client addresses, or arbitrary session properties.",
+    "policy_version": "Caller-supplied from the policy version active when the event was observed; null when unavailable.",
+    "policy_digest": "Caller-supplied digest of the active policy; null when unavailable.",
+    "output_rows_if_available": "QueryCompleted statistics.outputRows when it is a non-negative integer; null for QueryCreated or when unavailable.",
+    "event_timestamp": "QueryCreated createTime or QueryCompleted endTime, normalized to UTC ISO-8601.",
+    "received_timestamp": "Collector/normalizer receive time supplied by caller or current UTC time."
+  },
+  "trino_476_mapping": {
+    "QueryCreated": "createTime, context, metadata",
+    "QueryCompleted": "metadata, statistics, context, ioMetadata, failureInfo, createTime, endTime",
+    "query_id": "metadata.queryId",
+    "authenticated_user": "context.user (fallback context.originalUser)",
+    "groups": "context.groups",
+    "tables": "metadata.tables[{catalog,schema,table}] and ioMetadata.inputs[{catalogName,schema,table}]",
+    "columns": "metadata.tables[].columns[].column, ioMetadata.inputs[].columns[].name, ioMetadata.output.columns[].columnName",
+    "error_code": "failureInfo.errorCode.name; failure text and serialized stack traces are intentionally discarded"
+  }
 }
