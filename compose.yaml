@@ -255,6 +255,9 @@ services:
     environment:
       <<: *catalog-client-environment
       CATALOG_BOOTSTRAP_OIDC_CLIENT_SECRET: ${CATALOG_BOOTSTRAP_OIDC_CLIENT_SECRET:?Bootstrap OIDC secret is required}
+      # Registered as the audit warehouse's storage credential (append-only policy).
+      AUDIT_WRITER_STORAGE_ACCESS_KEY: ${AUDIT_WRITER_STORAGE_ACCESS_KEY:?Audit access key is required}
+      AUDIT_WRITER_STORAGE_SECRET_KEY: ${AUDIT_WRITER_STORAGE_SECRET_KEY:?Audit secret key is required}
     depends_on:
       catalog:
         condition: service_healthy
@@ -311,11 +314,33 @@ services:
       retries: 12
       start_period: 5s
 
+  audit-writer:
+    <<: *catalog-client
+    # Spool -> normalize -> dedupe -> Iceberg audit table, via PyIceberg only. It never
+    # queries Trino, so its writes cannot produce recursive audit events.
+    user: "${AUDIT_UID:-10001}:${AUDIT_GID:-10001}"
+    entrypoint: ["/app/.venv/bin/python", "-m", "audit.writer"]
+    command: ["--loop"]
+    environment:
+      AUDIT_WRITER_OIDC_CLIENT_SECRET: ${AUDIT_WRITER_OIDC_CLIENT_SECRET:?Audit OIDC secret is required}
+      AUDIT_WRITER_STORAGE_ACCESS_KEY: ${AUDIT_WRITER_STORAGE_ACCESS_KEY:?Audit access key is required}
+      AUDIT_WRITER_STORAGE_SECRET_KEY: ${AUDIT_WRITER_STORAGE_SECRET_KEY:?Audit secret key is required}
+      AUDIT_SPOOL_DIR: /spool
+    volumes:
+      - ${AUDIT_SPOOL_HOST_DIR:-./data/audit-spool}:/spool:rw
+    depends_on:
+      catalog-init:
+        condition: service_completed_successfully
+      audit-collector:
+        condition: service_started
+    restart: unless-stopped
+
   trino:
     image: trinodb/trino:476
     # Match the owner of the host's mode-0600 secret files without running as root.
     user: "${TRINO_UID:-1000}:${TRINO_GID:-1000}"
     environment:
+      AUDIT_INGEST_TOKEN: ${AUDIT_INGEST_TOKEN:?Audit ingest token is required}
       TRINO_INTERNAL_SHARED_SECRET: ${TRINO_INTERNAL_SHARED_SECRET:?Trino internal secret is required}
       TRINO_OIDC_CLIENT_SECRET: ${TRINO_OIDC_CLIENT_SECRET:?Trino OIDC secret is required}
       TRINO_STORAGE_ACCESS_KEY: ${TRINO_STORAGE_ACCESS_KEY:?Trino access key is required}
@@ -323,6 +348,9 @@ services:
     depends_on:
       catalog-init:
         condition: service_completed_successfully
+      # Trino retries 5xx deliveries but not refused connections.
+      audit-collector:
+        condition: service_healthy
     networks: [backend, frontend]
     ports:
       - "127.0.0.1:8443:8443"
@@ -331,11 +359,13 @@ services:
       - ./docker/trino/node.properties:/etc/trino/node.properties:ro
       - ./docker/trino/jvm.config:/etc/trino/jvm.config:ro
       - ./docker/trino/catalog/iceberg.properties:/etc/trino/catalog/hospital.properties:ro
+      - ./docker/trino/catalog/audit.properties:/etc/trino/catalog/audit.properties:ro
       - ./docker/trino/auth/password-authenticator.properties:/etc/trino/password-authenticator.properties:ro
       - ./docker/trino/auth/group-provider.properties:/etc/trino/group-provider.properties:ro
       - ./docker/trino/auth/groups.txt:/etc/trino/auth/groups.txt:ro
       - ./docker/trino/access-control.properties:/etc/trino/access-control.properties:ro
       - ./docker/trino/read-only.properties:/etc/trino/read-only.properties:ro
+      - ./docker/trino/http-event-listener.properties:/etc/trino/http-event-listener.properties:ro
       - ./policies/rules.json:/etc/trino/policies/rules.json:ro
       # Explicit bind type also accepts the generated data/secrets/... relative paths.
       - type: bind

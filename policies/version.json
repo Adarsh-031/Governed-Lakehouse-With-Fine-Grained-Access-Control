@@ -8,6 +8,6 @@
     "docker/trino/auth/groups.txt": "ea94ae449830f4488a6553aa061b111d1af137484e786fb2395500d461437bc9",
     "docker/trino/access-control.properties": "67109c3381a2bfb39aa2c2e025f101c1e6f06541fe05bb28e8f933a325e9474f",
     "docker/trino/read-only.properties": "293a8db1ed8c9ceb66819fd47d7db67fe56694ab7fa50f72bc79236080acbb41",
-    "docker/trino/config.properties": "edb62207ae0ddee311e84d0b3a09ab338a109b2c45d7ad596bc35ea4370e1735"
+    "docker/trino/config.properties": "ac02c2121405828104999aaffd20528d784f5c411b30373846e29e9a850f12c8"
   }
 }
