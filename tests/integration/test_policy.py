@@ -29,7 +29,7 @@ pytestmark = pytest.mark.skipif(
 
 def _workload_statements(path):
     """Read a role SQL file as statements, omitting its line comments."""
-    sql = "\\n".join(
+    sql = "\n".join(
         line
         for line in path.read_text(encoding="utf-8").splitlines()
         if not line.lstrip().startswith("--")
@@ -321,6 +321,6 @@ def test_clinical_matrix_filters_masks_and_denials(compose, tmp_path):
         "boundary_date_utc": boundary["utc_date"],
         "role_query_workloads": workload_results,
     }
-    (evidence / "policy-results.json").write_text(json.dumps(report, sort_keys=True) + "\\n")
+    (evidence / "policy-results.json").write_text(json.dumps(report, sort_keys=True) + "\n")
     (evidence / "policy-results.json").chmod(0o600)
     print(json.dumps(report, sort_keys=True))
