@@ -48,7 +48,8 @@ for prefix in bronze silver gold identity; do
     quiet mc cp "$payload" "etl/warehouse/$prefix/$probe/write.txt"
     quiet mc rm "etl/warehouse/$prefix/$probe/write.txt"
 done
-for prefix in silver gold; do
+# Trino reads audit/ for the admin-only audit catalog; writes stay denied.
+for prefix in silver gold audit; do
     quiet mc ls "trino/warehouse/$prefix/$probe/"
     quiet mc cat "trino/warehouse/$prefix/$probe/object.txt"
     denied cp "$payload" "trino/warehouse/$prefix/$probe/object.txt"
@@ -68,7 +69,7 @@ check_blocked_prefix() {
     denied rm "$role/warehouse/$prefix/$probe/object.txt"
 }
 for prefix in audit unassigned; do check_blocked_prefix etl "$prefix"; done
-for prefix in bronze identity audit unassigned; do check_blocked_prefix trino "$prefix"; done
+for prefix in bronze identity unassigned; do check_blocked_prefix trino "$prefix"; done
 for prefix in bronze silver gold identity unassigned; do check_blocked_prefix audit "$prefix"; done
 
 for role in etl trino audit; do

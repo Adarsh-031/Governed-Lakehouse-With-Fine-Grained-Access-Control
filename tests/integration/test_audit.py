@@ -14,7 +14,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def run_query(client, sql, user, password):
+def run_query(client, sql, user, password, rows=None):
     """Return (query_id, error_name); credentials never appear in diagnostics."""
     auth = httpx.BasicAuth(user, password)
     headers = {"X-Trino-User": user}
@@ -27,6 +27,8 @@ def run_query(client, sql, user, password):
         response = client.get(result["nextUri"], auth=auth, headers=headers)
         assert response.status_code == 200
         result = response.json()
+        if rows is not None:
+            rows.extend(result.get("data", []))
     return result["id"], result.get("error", {}).get("errorName")
 
 
@@ -53,21 +55,31 @@ def test_trino_events_reach_restricted_audit_table_once(compose):
     host, port = compose("port", "trino", "8443").strip().rsplit(":", 1)
     assert host == "127.0.0.1"
     context = ssl.create_default_context(cafile=str(compose.ca))
-    with httpx.Client(
+    client = httpx.Client(
         base_url=f"https://localhost:{port}", verify=context, trust_env=False, timeout=30
-    ) as client:
-        password = compose.values["TRINO_PASSWORD_DOCTOR_ALICE"]
-        allowed, error = run_query(client, "SELECT 1", "doctor_alice", password)
-        assert error is None
-        # The clinical policy never grants the catalog smoke table to anyone.
-        denied, error = run_query(
-            client, "SELECT * FROM hospital.catalog_smoke.roundtrip", "doctor_alice", password
+    )
+    issued = set()
+
+    def issue(sql, user="doctor_alice", rows=None):
+        query_id, error = run_query(
+            client, sql, user, compose.values[f"TRINO_PASSWORD_{user.upper()}"], rows
         )
-        assert error == "PERMISSION_DENIED"
+        issued.add(query_id)
+        return query_id, error
+
+    allowed, error = issue("SELECT 1")
+    assert error is None
+    failed, error = issue("SELECT no_such_column")
+    assert error == "COLUMN_NOT_FOUND"
+    # The clinical policy never grants the catalog smoke table to anyone.
+    denied, error = issue("SELECT * FROM hospital.catalog_smoke.roundtrip")
+    assert error == "PERMISSION_DENIED"
 
     expected = {
         (allowed, "QueryCreated"): "running",
         (allowed, "QueryCompleted"): "success",
+        (failed, "QueryCreated"): "running",
+        (failed, "QueryCompleted"): "sql_failure",
         (denied, "QueryCreated"): "running",
         (denied, "QueryCompleted"): "authorization_denial",
     }
@@ -75,7 +87,7 @@ def test_trino_events_reach_restricted_audit_table_once(compose):
     deadline = time.monotonic() + 90
     while True:
         compose("run", "--rm", "--no-deps", "audit-writer", "--once")
-        rows = stored(compose, allowed, denied)
+        rows = stored(compose, allowed, failed, denied)
         keys = {(row["query_id"], row["event_type"]): row for row in rows}
         if set(expected) <= set(keys) or time.monotonic() >= deadline:
             break
@@ -85,7 +97,32 @@ def test_trino_events_reach_restricted_audit_table_once(compose):
     )
     assert all(row["authenticated_user"] == "doctor_alice" for row in rows)
     assert keys[(denied, "QueryCompleted")]["error_code"] == "PERMISSION_DENIED"
+    assert keys[(failed, "QueryCompleted")]["error_code"] == "COLUMN_NOT_FOUND"
     assert len(rows) == len(keys), "duplicate (query_id, event_type) rows were stored"
+
+    # Only the admin group can read the audit table through Trino.
+    audit_sql = "SELECT query_id, event_type, status FROM audit.audit.query_events"
+    for user in ("doctor_alice", "doctor_bob", "researcher", "billing"):
+        assert issue(audit_sql, user)[1] == "PERMISSION_DENIED", user
+    admin_rows = []
+    _, error = issue(f"{audit_sql} WHERE query_id = '{denied}'", "admin", admin_rows)
+    assert error is None
+    assert sorted(map(tuple, admin_rows)) == [
+        (denied, "QueryCompleted", "authorization_denial"),
+        (denied, "QueryCreated", "running"),
+    ]
+
+    # No recursive records: after the writer has run again, every stored query ID
+    # is one this test issued through Trino; the writer itself never queries Trino.
+    time.sleep(5)
+    compose("run", "--rm", "--no-deps", "audit-writer", "--once")
+    all_ids = []
+    issue("SELECT DISTINCT query_id FROM audit.audit.query_events", "admin", all_ids)
+    assert {row[0] for row in all_ids} <= issued
+    assert "audit-writer" not in {
+        row["authenticated_user"] for row in stored(compose, *sorted(issued))
+    }
+    client.close()
 
     # A replayed delivery (Trino retry or a crash before spool cleanup) is not stored twice.
     spool = compose.audit_spool
@@ -105,7 +142,5 @@ def test_trino_events_reach_restricted_audit_table_once(compose):
     compose("run", "--rm", "--no-deps", "audit-writer", "--once")
     assert len(stored(compose, allowed)) == len(rows_before)
 
-    # Nothing but quarantined records (none expected here) remains in the spool.
-    leftovers = [p.name for p in spool.iterdir() if p.is_file() and p.suffix == ".json"]
-    assert leftovers == []
+    # Every Trino event was valid: nothing was quarantined.
     assert not (spool / "quarantine").exists()

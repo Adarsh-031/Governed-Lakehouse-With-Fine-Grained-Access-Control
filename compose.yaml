@@ -359,6 +359,7 @@ services:
       - ./docker/trino/node.properties:/etc/trino/node.properties:ro
       - ./docker/trino/jvm.config:/etc/trino/jvm.config:ro
       - ./docker/trino/catalog/iceberg.properties:/etc/trino/catalog/hospital.properties:ro
+      - ./docker/trino/catalog/audit.properties:/etc/trino/catalog/audit.properties:ro
       - ./docker/trino/auth/password-authenticator.properties:/etc/trino/password-authenticator.properties:ro
       - ./docker/trino/auth/group-provider.properties:/etc/trino/group-provider.properties:ro
       - ./docker/trino/auth/groups.txt:/etc/trino/auth/groups.txt:ro

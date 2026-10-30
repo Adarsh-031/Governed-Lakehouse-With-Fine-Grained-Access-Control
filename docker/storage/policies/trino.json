@@ -10,12 +10,12 @@
       "Effect": "Allow",
       "Action": ["s3:ListBucket"],
       "Resource": ["arn:aws:s3:::warehouse"],
-      "Condition": {"StringLike": {"s3:prefix": ["silver/*", "gold/*"]}}
+      "Condition": {"StringLike": {"s3:prefix": ["silver/*", "gold/*", "audit/*"]}}
     },
     {
       "Effect": "Allow",
       "Action": ["s3:GetObject"],
-      "Resource": ["arn:aws:s3:::warehouse/silver/*", "arn:aws:s3:::warehouse/gold/*"]
+      "Resource": ["arn:aws:s3:::warehouse/silver/*", "arn:aws:s3:::warehouse/gold/*", "arn:aws:s3:::warehouse/audit/*"]
     }
   ]
 }

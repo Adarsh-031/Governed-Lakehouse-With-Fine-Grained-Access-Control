@@ -43,13 +43,14 @@ def main():
     )
     print("PASS: authenticated bootstrap; hospital at silver/, restricted identity at identity/")
     print("PASS: identity ETL only; clinical Trino read; credential vending disabled")
-    print("PASS: audit warehouse at audit/; audit-writer only, no ETL or Trino grants")
+    print("PASS: audit warehouse at audit/; audit-writer writes; Trino read for admin only")
 
 
 AUDIT_WAREHOUSE = "audit"
 AUDIT_GRANTS = {
     "etl": set(),
-    "trino": set(),
+    # Read-only Trino catalog; rules.json lets only the admin group select from it.
+    "trino": {"describe", "select"},
     "audit-writer": {"describe", "select", "create", "modify"},
 }
 

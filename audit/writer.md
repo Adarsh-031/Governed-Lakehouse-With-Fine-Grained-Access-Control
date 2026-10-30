@@ -44,14 +44,19 @@ never sends SQL to Trino, so writing audit rows cannot generate query events.
 | Principal | Audit warehouse grants | Storage `audit/` |
 | --- | --- | --- |
 | audit-writer | describe, select, create, modify | list, get, put; no delete |
-| etl, trino | none | none |
+| trino (catalog `audit`, read-only) | describe, select | list, get |
+| etl | none | none |
 | Lakekeeper | registered with the audit-writer key | same |
 
 The only delete the audit-writer key can perform is
 `warehouse/audit/*/metadata/test`, the probe file Lakekeeper writes and removes
-when it validates a new warehouse. Admin reads through Trino are not wired yet:
-Trino's storage key cannot read `audit/` and Trino has no grant on the warehouse.
-Inspect rows with:
+when it validates a new warehouse.
+
+Trino mounts the warehouse as the read-only catalog `audit`
+(`docker/trino/catalog/audit.properties`). `policies/rules.json` grants
+`SELECT` on `audit.audit.query_events` to the admin group only; doctors,
+researchers and billing get `PERMISSION_DENIED`. Admin reads are themselves
+audited like any other query. Without Trino, rows can be inspected with:
 
 ```sh
 docker compose --env-file data/secrets/runtime.env run --rm audit-writer --summary <query_id> ...
@@ -71,6 +76,8 @@ docker compose --env-file data/secrets/runtime.env up -d --build trino audit-wri
 
 - `tests/unit/test_audit_writer.py`: batch logic with a fake sink (dedupe,
   replay, quarantine, failed append keeps the spool, schema matches contracts).
-- `tests/integration/test_audit.py` (`RUN_AUDIT_INTEGRATION=1`): a real allowed
-  and a real denied Trino query each land as created + completed rows with the
-  right status, exactly once, including after a replayed delivery.
+- `tests/integration/test_audit.py` (`RUN_AUDIT_INTEGRATION=1`): real success,
+  SQL failure (`COLUMN_NOT_FOUND`) and access-denied queries each land as created +
+  completed rows with the right status, exactly once (also after a replay); only
+  admin can read the table through Trino; every stored query ID was issued by the
+  test, so the writer produces no recursive records.
