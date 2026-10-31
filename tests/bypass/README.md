@@ -65,11 +65,36 @@ both row filtering and researcher masks/hidden fields. CTEs, subqueries and join
 execute; persistent view creation is denied by the SELECT-only policy.
 
 Inference uses exact aggregate counts and single-patient differencing against
-saved synthetic ground truth. Linkage uses age band, sex and masked ZIP as
-features; tokens only score correctness. Ambiguous keys and incomplete QIs do
-not establish identity. Rates use the whole population as denominator and report
-complete auxiliary rows and match precision separately. These toy-population
-measurements do not estimate real-world identification probability.
+saved synthetic ground truth. The privacy metrics report equivalence-class
+minimum k, singleton records and percentage, number of groups below k=5, and
+percentage of records in groups below k. They report both all-record and
+complete-case results so missing QIs are visible rather than silently dropped.
+
+Linkage uses age band, sex and masked ZIP prefix; it separately adds a profile
+of researcher-visible encounter reason codes that occur for fewer than five
+distinct source patients. In this schema, `encounters.reason_code` is only a
+condition-like proxy, not a complete diagnosis table. Tokens are used only to
+score correctness, never as a quasi-identifier. Ambiguous keys do not establish
+identity. These synthetic measurements do not estimate real-world
+re-identification probability or establish anonymity.
+
+The two privacy cases exclude the nine deliberately adversarial policy-boundary
+fixture patients from their metrics and report the Synthea source population,
+seed and reference date. This avoids presenting the 1k source plus test fixtures
+as a 1,009-patient cohort. Aggregate-only evidence is written to
+`privacy-risk-summary.json`; detailed query evidence and oracles remain in the
+private run directory.
+
+## Reproducing the 1k / 10k measurements
+
+The [privacy risk workflow](../../.github/workflows/privacy-risk.yml) generates
+the pinned Synthea source with seed 42, loads it into an isolated Trino/Iceberg
+stack and executes only the two privacy cases. It runs automatically for
+relevant pull requests using 1,000 source patients. Use **Actions → Researcher
+privacy risk scale audit → Run workflow** to select 1,000 or 10,000 patients
+for another reproducible run. The workflow publishes only the aggregate
+`privacy-risk-summary.json` artifact; do not upload the private full bypass
+evidence or patient-level HMAC tokens.
 
 The `audit_collector_outage` case now exercises the real Trino listener, stops and
 restarts the collector during a known query workload, and reconciles query IDs against
