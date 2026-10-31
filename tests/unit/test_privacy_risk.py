@@ -99,9 +99,7 @@ def test_rare_condition_signatures_use_distinct_patient_prevalence():
         {"patient_token": "p2", "reason_code": "COMMON"},
         {"patient_token": "p3", "reason_code": "COMMON"},
     ]
-    result = with_rare_condition_signatures(
-        patients, encounters, threshold_percent=25
-    )
+    result = with_rare_condition_signatures(patients, encounters, threshold_percent=25)
     signatures = {row["patient_token"]: row["rare_condition_signature"] for row in result}
     assert signatures == {
         "p1": ("RARE",),
