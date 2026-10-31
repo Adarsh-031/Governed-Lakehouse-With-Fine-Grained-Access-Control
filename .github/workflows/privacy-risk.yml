@@ -1,0 +1,91 @@
+name: Researcher privacy risk scale audit
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/privacy-risk.yml"
+      - "tests/bypass/privacy.py"
+      - "tests/bypass/test_bypass.py"
+      - "tests/bypass/report.py"
+      - "tests/integration/policy_fixture.py"
+      - "ingest/**"
+  workflow_dispatch:
+    inputs:
+      population:
+        description: "Synthea patient population"
+        required: true
+        type: choice
+        options:
+          - "1000"
+          - "10000"
+        default: "1000"
+      seed:
+        description: "Synthea seed"
+        required: true
+        default: "42"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: privacy-risk-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  privacy-risk:
+    name: K-anonymity, rare-code and aggregate inference measurements
+    runs-on: instabox-medium
+    timeout-minutes: 120
+    env:
+      POPULATION: ${{ github.event_name == 'workflow_dispatch' && inputs.population || '1000' }}
+      SEED: ${{ github.event_name == 'workflow_dispatch' && inputs.seed || '42' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install Java for the pinned Synthea generator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install 3.11
+
+      - name: Install locked dependencies
+        run: uv sync --locked --group dev --python 3.11
+
+      - name: Verify Docker engine
+        run: docker info
+
+      - name: Generate reproducible Synthea source population
+        run: |
+          uv run --no-sync python scripts/source_data.py synthea \
+            --patients "$POPULATION" --seed "$SEED"
+
+      - name: Measure source-only researcher privacy risk through Trino
+        env:
+          RUN_BYPASS_INTEGRATION: "1"
+          ACCESS_TEST_SOURCE: ${{ github.workspace }}/data/raw/synthea/${{ env.POPULATION }}-seed${{ env.SEED }}
+        run: |
+          uv run --no-sync pytest tests/bypass/test_bypass.py \
+            -k "aggregate_inference or quasi_identifier_linkage" \
+            -v --strict-config --strict-markers \
+            --bypass-results-dir="results/raw/privacy-risk-${POPULATION}-seed-${SEED}"
+
+      - name: Publish aggregate-only privacy metrics
+        uses: actions/upload-artifact@v4
+        with:
+          name: privacy-risk-${{ env.POPULATION }}-seed-${{ env.SEED }}
+          path: results/raw/privacy-risk-${{ env.POPULATION }}-seed-${{ env.SEED }}/privacy-risk-summary.json
+          if-no-files-found: error
+          retention-days: 30
