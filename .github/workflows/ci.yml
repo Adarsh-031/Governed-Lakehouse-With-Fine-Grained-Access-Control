@@ -76,6 +76,10 @@ jobs:
                   print(f"Valid YAML: {path}")
           PY
 
+      - name: Run unit tests
+        # Includes the schema/classification/access-contract drift checks.
+        run: uv run --no-sync pytest tests/unit -v --strict-config --strict-markers --junitxml=unit-test-results.xml
+
       - name: Verify private storage and service permissions
         env:
           RUN_STORAGE_INTEGRATION: "1"
@@ -96,9 +100,6 @@ jobs:
           RUN_AUDIT_INTEGRATION: "1"
         run: uv run --no-sync pytest tests/integration/test_audit.py -v --strict-config
 
-      - name: Run unit tests
-        # Includes the schema/classification/access-contract drift checks.
-        run: uv run --no-sync pytest tests/unit -v --strict-config --strict-markers --junitxml=unit-test-results.xml
 
       - name: Verify clinical access matrix, doctor filters, masks and denials
         env:
