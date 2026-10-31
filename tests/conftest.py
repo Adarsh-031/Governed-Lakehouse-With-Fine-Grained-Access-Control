@@ -74,7 +74,8 @@ def isolated_compose(tmp_path):
             capture_output=True,
             text=True,
             input=input_text,
-            timeout=360,
+            # Large benchmark ingests (bench/run.py) can raise this per-command limit.
+            timeout=int(os.environ.get("LAKEHOUSE_COMPOSE_TIMEOUT", "360")),
             env=environment,
         )
         output = result.stdout + result.stderr

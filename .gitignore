@@ -21,3 +21,6 @@ data/secrets/**
 !data/secrets/README.md
 results/raw/**
 !results/raw/README.md
+# Benchmark runs hold timings, counts and hashes only (no patient rows); commit them.
+!results/raw/bench-*/
+!results/raw/bench-*/**

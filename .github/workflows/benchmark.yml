@@ -1,0 +1,85 @@
+name: Benchmark
+
+# Policy-overhead benchmark (#25). Long-running, so it never runs on every push:
+# add the "run-benchmark" label to a pull request, or start it manually from main.
+on:
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      scales:
+        description: Patient counts to generate and benchmark (space separated)
+        default: "1000 10000"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: benchmark-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    name: Policy overhead benchmark
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-benchmark'
+    runs-on: instabox-medium
+    timeout-minutes: 180
+    env:
+      SCALES: ${{ inputs.scales || '1000 10000' }}
+      LAKEHOUSE_COMPOSE_TIMEOUT: "2400"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+
+      - run: uv python install 3.11
+      - run: uv sync --locked --group dev --python 3.11
+
+      - name: Install Java 17 for Synthea
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Cache Synthea JAR and generated samples
+        uses: actions/cache@v4
+        with:
+          path: |
+            data/tools
+            data/raw/synthea
+          key: synthea-${{ env.SCALES }}-${{ hashFiles('scripts/source_data.py', 'scripts/synthea.properties') }}
+
+      - name: Generate Synthea samples
+        shell: bash
+        run: |
+          for scale in $SCALES; do
+            start=$(date +%s)
+            ./scripts/generate_synthea.sh --patients "$scale" --seed 42
+            echo "Synthea $scale patients: $(( $(date +%s) - start ))s"
+          done
+
+      - name: Run benchmark
+        run: uv run --no-sync python -m bench.run --scales $SCALES
+
+      - name: Print results
+        if: always()
+        shell: bash
+        run: |
+          for file in results/raw/bench-*/environment.json results/raw/bench-*/*.csv; do
+            [ -f "$file" ] || continue
+            echo "===== $file"
+            cat "$file"
+          done
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: results/raw/bench-*/
+          if-no-files-found: warn
+          retention-days: 30

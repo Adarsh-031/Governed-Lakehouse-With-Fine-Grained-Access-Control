@@ -1,0 +1,14 @@
+scale,role,query_id,enforced_rows,baseline_rows,fingerprints_match,unauthorized_rows
+10000,doctor,D1,317692,317692,True,0
+10000,doctor,D2,10,10,True,0
+10000,doctor,D3,20,20,True,0
+10000,doctor,D4,4916,4916,True,0
+10000,researcher,R1,20,20,True,0
+10000,researcher,R2,82,82,True,0
+10000,researcher,R3,1142,1142,True,0
+10000,researcher,R4,273,273,True,0
+10000,billing,B1,11,11,True,0
+10000,billing,B2,1241,1241,True,0
+10000,billing,B3,991515,991515,True,0
+10000,billing,B4,2162698,2162698,True,0
+##[group]Run actions/upload-artifact@v4
