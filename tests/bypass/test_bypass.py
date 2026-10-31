@@ -377,7 +377,7 @@ def aggregate_inference(attempt):
     observed_prevalence = attempt.sql(
         "SELECT reason_code, count(DISTINCT patient_token) "
         f"FROM hospital.silver.encounters WHERE {excluded_sql} "
-        "AND reason_code IS NOT NULL "
+        "AND reason_code IS NOT NULL AND trim(reason_code) <> '' "
         "GROUP BY reason_code ORDER BY reason_code",
         "researcher",
     )
