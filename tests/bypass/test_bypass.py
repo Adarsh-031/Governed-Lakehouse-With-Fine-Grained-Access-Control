@@ -293,6 +293,9 @@ def _privacy_source_population(attempt):
         )
     ).resolve()
     manifest = json.loads((source_dir / "manifest.json").read_text(encoding="utf-8"))
+    requested_population = manifest.get("parameters", {}).get("population")
+    if requested_population is not None and requested_population != len(source_patients):
+        raise AssertionError("Synthea manifest population does not match the source oracle")
     return source_patients, source_encounters, boundary_tokens, manifest
 
 
@@ -306,8 +309,10 @@ def _privacy_evidence(attempt, case_name, metrics):
         ),
         "cases": {},
     }
-    payload["source"] = metrics.pop("source")
-    payload["cases"][case_name] = metrics
+    payload["source"] = metrics["source"]
+    payload["cases"][case_name] = {
+        key: value for key, value in metrics.items() if key != "source"
+    }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     path.chmod(0o600)
 
@@ -319,7 +324,9 @@ def aggregate_inference(attempt):
     population = len(source_patients)
     excluded_sql = (
         "TRUE" if not boundary_tokens else
-        "patient_token NOT IN (" + ", ".join(f"'{token}'" for token in sorted(boundary_tokens)) + ")"
+        "patient_token NOT IN ("
+        + ", ".join(f"'{token}'" for token in sorted(boundary_tokens))
+        + ")"
     )
 
     source_records = [
