@@ -15,7 +15,7 @@ For each quasi-identifier set, the implementation groups records by the exact re
 - `unique_records` and `unique_percent`: the number and percentage of records in singleton classes.
 - `equivalence_classes` and `class_size_histogram`: supporting cohort distribution.
 
-Null values are treated as an explicit released value for equivalence-class counts. They are not treated as missing identity evidence for the attacker linkage test.
+Null values are treated as an explicit released value for equivalence-class counts, but null and blank quasi-identifier values are treated as incomplete and excluded from attacker linkage.
 
 Rare-condition signatures use the patient-level prevalence of each visible reason code. A code is considered rare when it occurs in at most `max(1, ceil(N * 0.05))` distinct patients. The threshold is an explicit attacker-feature assumption for this experiment, not a deployed suppression rule or privacy control. The code also reports the demographic-only model so the effect of adding the clinical signature can be compared.
 
