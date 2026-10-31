@@ -24,11 +24,7 @@ def reconcile_query_events(
     for event in observed_events:
         query_id = event.get("query_id")
         event_type = event.get("event_type")
-        if (
-            not isinstance(query_id, str)
-            or not query_id
-            or event_type not in EXPECTED_EVENT_TYPES
-        ):
+        if not isinstance(query_id, str) or not query_id or event_type not in EXPECTED_EVENT_TYPES:
             invalid += 1
             continue
 
@@ -38,9 +34,7 @@ def reconcile_query_events(
         target[pair] += 1
 
     expected_pairs = {
-        (query_id, event_type)
-        for query_id in expected
-        for event_type in EXPECTED_EVENT_TYPES
+        (query_id, event_type) for query_id in expected for event_type in EXPECTED_EVENT_TYPES
     }
     missing = sorted(expected_pairs - set(counts))
     covered = {
@@ -56,13 +50,10 @@ def reconcile_query_events(
         "coverage_percent": round(coverage, 2),
         "missing_query_ids": sorted({query_id for query_id, _ in missing}),
         "missing_event_pairs": [
-            {"query_id": query_id, "event_type": event_type}
-            for query_id, event_type in missing
+            {"query_id": query_id, "event_type": event_type} for query_id, event_type in missing
         ],
         "missing_event_count": len(missing),
-        "duplicate_event_count": sum(
-            count - 1 for count in all_observed.values() if count > 1
-        ),
+        "duplicate_event_count": sum(count - 1 for count in all_observed.values() if count > 1),
         "unexpected_query_ids": sorted({query_id for query_id, _ in unexpected}),
         "unexpected_event_count": sum(unexpected.values()),
         "invalid_event_count": invalid,

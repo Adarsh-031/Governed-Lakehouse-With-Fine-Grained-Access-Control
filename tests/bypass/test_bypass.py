@@ -10,12 +10,11 @@ import httpx
 import pytest
 
 from audit.reliability import reconcile_query_events
-
 from tests.access.oracle import USERS, assert_rows, decisions, masked_value
 from tests.access.test_access import forbidden_operations
 from tests.integration.test_trino import query
 
-from .report import ROOT, linkage_metrics, load_cases
+from .report import linkage_metrics, load_cases
 
 
 def compare(attempt, actual, expected, table, columns):
@@ -353,9 +352,7 @@ def audit_collector_outage(attempt):
     compose = attempt.access.compose
 
     def stored(query_ids):
-        output = compose(
-            "run", "--rm", "--no-deps", "audit-writer", "--summary", *query_ids
-        )
+        output = compose("run", "--rm", "--no-deps", "audit-writer", "--summary", *query_ids)
         return json.loads(next(line for line in output.splitlines() if line.startswith("[")))
 
     # Establish a working-path positive control before deliberately interrupting intake.
