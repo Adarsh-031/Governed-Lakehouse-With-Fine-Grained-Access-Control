@@ -102,3 +102,25 @@ and service-credential compromise, beyond ordinary SQL-user enforcement.
   12 cases as `not_run` with reasons, rather than manufacturing passes.
 - All 13 evidence files were private (`0600` in the `0700` run directory), and
   scanning against generated test credentials found no credential matches.
+
+
+## Issue #24 — source-scale researcher privacy measurements
+
+The original 12-case validation described above used 2 source patients plus
+9 deliberately appended policy-boundary fixtures. Its 11-patient singleton
+and linkage findings are retained as historical fixture results; they are not
+1,000-patient estimates.
+
+Issue #24 adds source-only k-anonymity, small-cell, exact-count differencing and
+rare reason-code profile measurements. The metrics exclude all boundary
+fixture tokens, use masked researcher-visible ZIP values, and report the
+actual Synthea manifest population, seed and reference date. The available
+condition-like field is `encounters.reason_code`; it is explicitly not treated
+as a complete diagnosis table.
+
+The 1,000-patient run is automated on relevant pull requests. A 10,000-patient
+run can be started manually through the privacy risk workflow. The measured
+summary is generated as the private-run `privacy-risk-summary.json` and the
+workflow artifact contains only that aggregate file. Do not populate this
+document with results copied from the 11-patient fixture or with unexecuted
+10k estimates.
