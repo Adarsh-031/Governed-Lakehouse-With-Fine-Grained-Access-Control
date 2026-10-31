@@ -14,13 +14,13 @@ from tests.access.oracle import USERS, assert_rows, decisions, masked_value
 from tests.access.test_access import forbidden_operations
 from tests.integration.test_trino import query
 
+from .report import load_cases, private_output
 from .privacy import (
     aggregate_inference_metrics as privacy_aggregate_metrics,
     equivalence_class_metrics,
     quasi_identifier_linkage_metrics,
     with_rare_condition_signatures,
 )
-from .report import load_cases, private_output
 
 
 def save_privacy_summary(attempt, filename, payload):
