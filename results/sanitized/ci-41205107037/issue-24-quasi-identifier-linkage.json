@@ -1,0 +1,59 @@
+{
+  "after_mitigation": {
+    "baseline_linkage": {
+      "complete_auxiliary_rows": 1004,
+      "correct_links": 0,
+      "linkage_percent": 0.0,
+      "match_precision_percent": null,
+      "population": 1009,
+      "unique_matches": 0
+    },
+    "linkage_with_rare_condition_signature": {
+      "complete_auxiliary_rows": 1004,
+      "correct_links": 0,
+      "linkage_percent": 0.0,
+      "match_precision_percent": null,
+      "population": 1009,
+      "unique_matches": 0
+    },
+    "release_best_case_match_precision_percent": 9.090909090909092
+  },
+  "attacker_model": "Exact auxiliary age band, sex, ZIP prefix and uncommon reason-code signatures; synthetic population only.",
+  "before_mitigation": {
+    "baseline_linkage": {
+      "complete_auxiliary_rows": 1004,
+      "correct_links": 94,
+      "linkage_percent": 9.31615460852329,
+      "match_precision_percent": 100.0,
+      "population": 1009,
+      "unique_matches": 94
+    },
+    "linkage_with_rare_condition_signature": {
+      "complete_auxiliary_rows": 1004,
+      "correct_links": 759,
+      "linkage_percent": 75.22299306243806,
+      "match_precision_percent": 100.0,
+      "population": 1009,
+      "unique_matches": 759
+    }
+  },
+  "case": "quasi_identifier_linkage",
+  "issue": [
+    24,
+    46
+  ],
+  "min_cell": 11,
+  "population": 1009,
+  "quasi_identifiers": [
+    "age_band",
+    "sex",
+    "zip",
+    "rare_condition_signature"
+  ],
+  "rare_condition_definition": {
+    "field": "encounters.reason_code",
+    "threshold_count": "max(1, ceil(population * 0.05))",
+    "threshold_percent": 5,
+    "unit": "distinct patients"
+  }
+}
