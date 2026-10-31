@@ -71,7 +71,8 @@ Keep necessary clinical identity data in a separately restricted identity table.
    --group dev pytest tests/bypass -v`; see [suite and evidence](tests/bypass/README.md)
    and [findings and decisions](docs/bypass-report.md). Residual researcher privacy
    risks are measured separately from authorization failures; the #22 audit outage
-   case now reconciles known query IDs across a collector stop/restart.
+   case reconciles known query IDs across a collector stop/restart, and #24 adds
+   source-only researcher k-anonymity / aggregate inference measurements at 1k and optional 10k scale.
 
 ## Build order
 - [x] Choose catalog implementation and pin service versions (ADR-001).
