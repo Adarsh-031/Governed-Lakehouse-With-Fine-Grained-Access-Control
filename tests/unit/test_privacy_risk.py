@@ -137,6 +137,7 @@ def test_rare_condition_prevalence_counts_distinct_patients_not_encounters():
         (),
     ]
 
+
 def test_linkage_excludes_blank_quasi_identifier_values():
     released = [
         {"patient_token": "p1", "age_band": "40-49", "sex": "F", "zip": "021**"},
