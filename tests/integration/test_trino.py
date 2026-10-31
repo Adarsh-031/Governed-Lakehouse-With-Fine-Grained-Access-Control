@@ -17,12 +17,20 @@ pytestmark = pytest.mark.skipif(
 
 def query(client, sql, *, user="doctor_alice", password=None, headers=None, error_info=None):
     """Follow the statement protocol; never include credentials in diagnostics."""
-    response = client.post(
-        "/v1/statement",
-        content=sql,
-        auth=httpx.BasicAuth(user, password) if password is not None else None,
-        headers={"X-Trino-User": user, **(headers or {})},
-    )
+    for attempt in range(2):
+        try:
+            response = client.post(
+                "/v1/statement",
+                content=sql,
+                auth=httpx.BasicAuth(user, password) if password is not None else None,
+                headers={"X-Trino-User": user, **(headers or {})},
+            )
+            break
+        except httpx.RemoteProtocolError:
+            # Trino can close a reused keep-alive connection (seen after 401 responses)
+            # before replying; nothing was submitted, so resend once on a new connection.
+            if attempt:
+                raise
     if response.status_code != 200:
         return response.status_code, [], None
     result = response.json()

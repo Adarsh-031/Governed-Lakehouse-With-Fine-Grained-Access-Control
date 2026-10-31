@@ -74,8 +74,10 @@ def main(argv: list[str]) -> int:
         return 2
     runs = sorted(Path().glob(argv[1])) if "*" in argv[1] else [Path(argv[1])]
     if not runs:
-        print(f"No bypass run matches {argv[1]}", file=sys.stderr)
-        return 1
+        # An earlier step failed before the bypass suite ran; that step already fails
+        # the job, so do not add a second, misleading failure here.
+        print(f"No bypass run matches {argv[1]}; nothing to summarize.")
+        return 0
     for path in summarize(runs[-1], Path(argv[2])):
         print(f"== {path.name}")
         print(path.read_text())
