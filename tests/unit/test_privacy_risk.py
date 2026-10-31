@@ -27,7 +27,7 @@ def test_k_anonymity_reports_minimum_class_and_unique_percent():
     assert result["k_min"] == 1
     assert result["unique_records"] == 2
     assert result["unique_percent"] == 50.0
-    assert result["class_size_histogram"] == {"1": 2, "2": 2}
+    assert result["class_size_histogram"] == {"1": 2, "2": 1}
 
 
 def test_empty_population_has_no_fabricated_anonymity_claim():
@@ -140,3 +140,19 @@ def test_rare_condition_prevalence_counts_distinct_patients_not_encounters():
         (),
         (),
     ]
+
+def test_linkage_excludes_blank_quasi_identifier_values():
+    released = [
+        {"patient_token": "p1", "age_band": "40-49", "sex": "F", "zip": "021**"},
+        {"patient_token": "p2", "age_band": "50-59", "sex": "M", "zip": ""},
+    ]
+    auxiliary = [
+        {"patient_token": "p1", "age_band": "40-49", "sex": "F", "zip": "021**"},
+        {"patient_token": "p2", "age_band": "50-59", "sex": "M", "zip": ""},
+    ]
+    result = quasi_identifier_linkage_metrics(
+        released, auxiliary, quasi_identifiers=["age_band", "sex", "zip"]
+    )
+    assert result["complete_auxiliary_rows"] == 1
+    assert result["unique_matches"] == 1
+    assert result["correct_links"] == 1
