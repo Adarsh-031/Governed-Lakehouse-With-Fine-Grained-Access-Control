@@ -8,10 +8,37 @@ from pathlib import Path
 import pyarrow as pa
 
 from ingest.pipeline import SCHEMAS, etl_catalog, key_from_environment, prepare
+from ingest.release import publish
+
+MIN_CELL = 11
 
 
 def token(name):
     return "v1:" + hashlib.sha256(f"issue18:{name}".encode()).hexdigest()
+
+
+def released(pairs, columns):
+    """Independent expectation for #46 releases: distinct patients, cells >= 11 only."""
+    members = {}
+    for token_value, key in pairs:
+        members.setdefault(key, set()).add(token_value)
+    return [
+        {**dict(zip(columns, key, strict=True)), "patient_count": len(tokens)}
+        for key, tokens in members.items()
+        if len(tokens) >= MIN_CELL
+    ]
+
+
+def zip3(value):
+    digits = value[:5] if value else ""
+    valid = (
+        value is not None
+        and len(value) in (5, 10)
+        and digits.isdigit()
+        and len(digits) == 5
+        and (len(value) == 5 or (value[5] == "-" and value[6:].isdigit()))
+    )
+    return digits[:3] + "**" if valid else None
 
 
 def main():
@@ -119,6 +146,25 @@ def main():
     data_oracle = {
         name: [*prepared.tables[name].to_pylist(), *rows] for name, rows in fixture_rows.items()
     }
+    data_oracle["researcher_demographics"] = released(
+        (
+            (p["patient_token"], (p["age_band"], p["sex"], p["race"]))
+            for p in data_oracle["patients"]
+        ),
+        ("age_band", "sex", "race"),
+    )
+    data_oracle["researcher_geography"] = released(
+        ((p["patient_token"], (zip3(p["zip"]),)) for p in data_oracle["patients"]),
+        ("zip_prefix",),
+    )
+    data_oracle["researcher_conditions"] = released(
+        (
+            (e["patient_token"], (e["reason_code"],))
+            for e in data_oracle["encounters"]
+            if e["reason_code"]
+        ),
+        ("reason_code",),
+    )
     data_oracle["audit"] = [
         {"query_id": "synthetic-query", "query_text_restricted": "restricted text"}
     ]
@@ -136,6 +182,8 @@ def main():
         clinical.load_table(("silver", name)).append(
             pa.Table.from_pylist(rows, schema=SCHEMAS[name])
         )
+    # Rebuild the aggregate-only research releases over the final silver rows (#46).
+    publish(clinical)
     # Isolated audit SQL fixture uses the existing clinical warehouse via a test-only
     # catalog alias. It is not an audit read grant or a production audit pipeline.
     clinical.create_namespace("audit")

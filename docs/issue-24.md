@@ -76,4 +76,4 @@ Each integration run retains its complete patient-level evidence in the private 
 - Rare reason-code signatures are a deliberately simplified attacker feature. They are not a clinical diagnosis classifier.
 - Aggregate counts remain vulnerable to differencing unless a separate query-governance mechanism (such as small-cell suppression, query-history controls, or a privacy-budgeted interface) is implemented.
 - HMAC tokens are pseudonyms, not anonymization. Re-identification risk depends on the released fields, auxiliary data, population and attack model.
-- Synthetic results do not estimate real-world re-identification probabilities. The mitigation/acceptance decision remains tracked in [issue #46](https://github.com/Adarsh-031/Governed-Lakehouse-With-Fine-Grained-Access-Control/issues/46).
+- Synthetic results do not estimate real-world re-identification probabilities. The mitigation (aggregate-only researcher releases with an 11-patient small-cell threshold) is described in [issue-46.md](issue-46.md).

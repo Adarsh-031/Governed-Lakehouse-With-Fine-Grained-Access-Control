@@ -57,11 +57,11 @@ def test_baseline_inlines_doctor_filter_and_keeps_aliases():
 def test_baseline_applies_researcher_masks_and_drops_hidden_columns():
     rules, groups, columns = load_policy()
     rewritten = baseline_sql(
-        "SELECT zip FROM hospital.silver.patients", "researcher", rules, groups, columns
+        "SELECT start_time FROM hospital.silver.encounters", "researcher", rules, groups, columns
     )
-    assert "substr(zip, 1, 3) || '**'" in rewritten
-    assert "birthdate" not in rewritten
-    assert "WHERE" not in rewritten.split("AS patients")[0].split("FROM hospital")[1]
+    assert "date_trunc('month', start_time)" in rewritten
+    assert "reason_description" not in rewritten and "reason_code" not in rewritten
+    assert "WHERE" not in rewritten.split("AS encounters")[0].split("FROM hospital")[1]
 
 
 def test_baseline_rejects_tables_the_role_cannot_read():

@@ -11,6 +11,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 GROUPS = {"doctor", "researcher", "billing", "admin"}
+RELEASES = {"researcher_demographics", "researcher_geography", "researcher_conditions"}
 TABLES = yaml.safe_load((ROOT / "policies/schema-contract.yaml").read_text())["tables"]
 with (ROOT / "policies/access-matrix.csv").open(newline="") as handle:
     READER = csv.DictReader(handle)
@@ -45,6 +46,7 @@ def test_every_inventory_column_has_exactly_one_decision_per_group():
         "hospital.silver.care_team",
         "identity.identity.patient_identity",
         "audit.audit.query_events",
+        *(f"hospital.gold.{table}" for table in RELEASES),
     }
 
 
@@ -69,9 +71,9 @@ def test_decisions_are_explicit_and_denied_columns_cannot_carry_masks(row):
 def test_table_operations_and_scopes_match_role_boundaries(group, table):
     expected_tables = {
         "doctor": {"patients", "encounters"},
-        "researcher": {"patients", "encounters"},
+        "researcher": {"patients", "encounters", *RELEASES},
         "billing": {"claims"},
-        "admin": {"patients", "encounters", "claims", "care_team", "audit"},
+        "admin": {"patients", "encounters", "claims", "care_team", "audit", *RELEASES},
     }
     expected_scope = "NONE"
     if table in expected_tables[group]:
@@ -90,16 +92,20 @@ def test_research_masks_and_hidden_fields_cannot_leak_exact_values():
         for (group, table, column), row in INDEX.items()
         if group == "researcher" and row["operations"] == "SELECT"
     }
+    # #46: row-level quasi-identifiers and reason codes are hidden from research;
+    # they are released only as suppressed aggregates in hospital.gold.
     assert {key for key, row in decisions.items() if row["visibility"] == "hidden"} == {
         ("patients", "birthdate"),
+        ("patients", "age_band"),
+        ("patients", "sex"),
+        ("patients", "race"),
+        ("patients", "ethnicity"),
+        ("patients", "zip"),
         ("encounters", "description"),
+        ("encounters", "reason_code"),
         ("encounters", "reason_description"),
     }
     expected_masks = {
-        ("patients", "zip"): (
-            "CASE WHEN length(zip) IN (5, 10) AND regexp_like(zip, '^[0-9]{5}(-[0-9]{4})?$') "
-            "THEN substr(zip, 1, 3) || '**' ELSE CAST(NULL AS VARCHAR) END"
-        ),
         ("encounters", "start_time"): "CAST(date_trunc('month', start_time) AS TIMESTAMP(6))",
         ("encounters", "stop_time"): "CAST(date_trunc('month', stop_time) AS TIMESTAMP(6))",
     }
@@ -107,11 +113,20 @@ def test_research_masks_and_hidden_fields_cannot_leak_exact_values():
         key: row["mask_sql"] for key, row in decisions.items() if row["visibility"] == "masked"
     } == expected_masks
     for table, column in expected_masks:
-        expected_type = "VARCHAR" if column == "zip" else "TIMESTAMP(6)"
-        assert TABLES[table]["columns"][column] == expected_type
-    assert INDEX["researcher", "patients", "age_band"]["visibility"] == "visible"
+        assert TABLES[table]["columns"][column] == "TIMESTAMP(6)"
     assert TABLES["patients"]["columns"]["birthdate"] == "DATE"
     assert TABLES["patients"]["columns"]["age_band"] == "VARCHAR"
+
+
+def test_research_releases_are_aggregate_only_without_patient_keys():
+    for table in RELEASES:
+        columns = TABLES[table]["columns"]
+        assert TABLES[table]["resource"] == f"hospital.gold.{table}"
+        assert "patient_token" not in columns
+        assert columns["patient_count"] == "BIGINT"
+        for group in GROUPS:
+            row = INDEX[group, table, "patient_count"]
+            assert row["operations"] == ("SELECT" if group in {"researcher", "admin"} else "NONE")
 
 
 def test_billing_has_codes_and_costs_without_free_text_or_patient_demographics():

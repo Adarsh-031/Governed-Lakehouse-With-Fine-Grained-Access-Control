@@ -17,6 +17,7 @@ import pandas as pd
 import pyarrow as pa
 from pyiceberg.catalog import load_catalog
 
+from ingest.release import publish
 from ingest.tokenization import patient_token
 from scripts.source_data import csv_inventory
 
@@ -526,7 +527,10 @@ def main():
         else:
             # Freeze expected sets before catalog reads/writes, never from the live care_team.
             save_oracle(args.oracle, prepared.oracle)
-            report = load(prepared, etl_catalog(), etl_catalog("identity"))
+            clinical = etl_catalog()
+            report = load(prepared, clinical, etl_catalog("identity"))
+            # Rebuild the aggregate-only research releases from the loaded silver (#46).
+            report["research_releases"] = publish(clinical)
         print(json.dumps(report, sort_keys=True))
     except Exception as error:  # noqa: BLE001 - never expose SDK/source/credential text
         message = str(error) if isinstance(error, ValidationError) else type(error).__name__

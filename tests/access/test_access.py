@@ -26,7 +26,8 @@ def test_every_matrix_cell_against_independent_values(access, user, row):
     if denied:
         return
     assert_rows(actual, access.oracle.rows(user, table, [column]), table, [column])
-    assert access.execute(f"SELECT typeof({column}) FROM {resource} LIMIT 1", user) == [
+    # arbitrary() keeps one row for an empty #46 release (all cells suppressed).
+    assert access.execute(f"SELECT typeof(arbitrary({column})) FROM {resource}", user) == [
         [TABLES[table]["columns"][column].lower()]
     ]
 

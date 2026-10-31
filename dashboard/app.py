@@ -67,14 +67,17 @@ def query_examples_for_user(user: str) -> dict[str, str]:
     if user == "researcher":
         return {
             "Current identity and groups": identity,
-            "Research patients — masked ZIP, visible age band": (
-                "SELECT patient_token, age_band, sex, race, ethnicity, zip "
-                "FROM hospital.silver.patients ORDER BY patient_token LIMIT 20"
+            "Research cohort — suppressed release (cells >= 11 patients)": (
+                "SELECT age_band, sex, race, patient_count "
+                "FROM hospital.gold.researcher_demographics ORDER BY patient_count DESC LIMIT 20"
             ),
             "Research encounters — monthly time masks": (
                 "SELECT encounter_id, patient_token, start_time, stop_time, encounter_class, "
-                "code, reason_code FROM hospital.silver.encounters "
+                "code FROM hospital.silver.encounters "
                 "ORDER BY start_time DESC LIMIT 20"
+            ),
+            "Expected denial: row-level demographics": (
+                "SELECT patient_token, age_band, sex, zip FROM hospital.silver.patients LIMIT 10"
             ),
             "Expected denial: claims table": denied_claims,
         }

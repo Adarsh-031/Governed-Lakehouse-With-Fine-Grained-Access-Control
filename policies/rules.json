@@ -300,8 +300,24 @@
           "allow": false
         },
         {
+          "name": "age_band",
+          "allow": false
+        },
+        {
+          "name": "sex",
+          "allow": false
+        },
+        {
+          "name": "race",
+          "allow": false
+        },
+        {
+          "name": "ethnicity",
+          "allow": false
+        },
+        {
           "name": "zip",
-          "mask": "CASE WHEN length(zip) IN (5, 10) AND regexp_like(zip, '^[0-9]{5}(-[0-9]{4})?$') THEN substr(zip, 1, 3) || '**' ELSE CAST(NULL AS VARCHAR) END"
+          "allow": false
         }
       ]
     },
@@ -340,7 +356,83 @@
           "allow": false
         },
         {
+          "name": "reason_code",
+          "allow": false
+        },
+        {
           "name": "reason_description",
+          "allow": false
+        }
+      ]
+    },
+    {
+      "user": "researcher",
+      "group": "researcher",
+      "catalog": "hospital",
+      "schema": "gold",
+      "table": "researcher_demographics",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "$path",
+          "allow": false
+        },
+        {
+          "name": "$partition",
+          "allow": false
+        },
+        {
+          "name": "$file_modified_time",
+          "allow": false
+        }
+      ]
+    },
+    {
+      "user": "researcher",
+      "group": "researcher",
+      "catalog": "hospital",
+      "schema": "gold",
+      "table": "researcher_geography",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "$path",
+          "allow": false
+        },
+        {
+          "name": "$partition",
+          "allow": false
+        },
+        {
+          "name": "$file_modified_time",
+          "allow": false
+        }
+      ]
+    },
+    {
+      "user": "researcher",
+      "group": "researcher",
+      "catalog": "hospital",
+      "schema": "gold",
+      "table": "researcher_conditions",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "$path",
+          "allow": false
+        },
+        {
+          "name": "$partition",
+          "allow": false
+        },
+        {
+          "name": "$file_modified_time",
           "allow": false
         }
       ]
@@ -493,6 +585,78 @@
         },
         {
           "name": "query_text_restricted",
+          "allow": false
+        }
+      ]
+    },
+    {
+      "user": "admin",
+      "group": "admin",
+      "catalog": "hospital",
+      "schema": "gold",
+      "table": "researcher_demographics",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "$path",
+          "allow": false
+        },
+        {
+          "name": "$partition",
+          "allow": false
+        },
+        {
+          "name": "$file_modified_time",
+          "allow": false
+        }
+      ]
+    },
+    {
+      "user": "admin",
+      "group": "admin",
+      "catalog": "hospital",
+      "schema": "gold",
+      "table": "researcher_geography",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "$path",
+          "allow": false
+        },
+        {
+          "name": "$partition",
+          "allow": false
+        },
+        {
+          "name": "$file_modified_time",
+          "allow": false
+        }
+      ]
+    },
+    {
+      "user": "admin",
+      "group": "admin",
+      "catalog": "hospital",
+      "schema": "gold",
+      "table": "researcher_conditions",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "$path",
+          "allow": false
+        },
+        {
+          "name": "$partition",
+          "allow": false
+        },
+        {
+          "name": "$file_modified_time",
           "allow": false
         }
       ]
