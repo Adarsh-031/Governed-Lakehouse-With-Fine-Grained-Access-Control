@@ -121,8 +121,9 @@ def test_role_query_examples_use_explicit_columns_and_expected_denials(monkeypat
     assert "hospital.silver.claims" in doctor["Expected denial: claims table"]
 
     researcher = app.query_examples_for_user("researcher")
-    research_sql = researcher["Research patients — masked ZIP, visible age band"]
-    assert "age_band" in research_sql and "zip" in research_sql
+    research_sql = researcher["Research cohort — suppressed release (cells >= 11 patients)"]
+    assert "hospital.gold.researcher_demographics" in research_sql
+    assert "zip" in researcher["Expected denial: row-level demographics"]
     assert "birthdate" not in research_sql.lower()
     assert "hospital.silver.claims" in researcher["Expected denial: claims table"]
 

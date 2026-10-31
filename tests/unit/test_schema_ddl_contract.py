@@ -34,7 +34,11 @@ def test_ddl_matches_approved_resources_types_and_patient_identifier_boundary():
                 columns[column] = sql_type
             key = expected[resource]
             assert columns == tables[key]["columns"]
-            assert "patient_token" in required
+            if resource.startswith("hospital.gold."):
+                # #46 releases are aggregates: no patient key may appear at all.
+                assert "patient_token" not in columns and not required
+            else:
+                assert "patient_token" in required
             assert "format = 'PARQUET'" in properties
             assert "format_version = 2" in properties
             assert "location" not in properties  # Warehouse controls placement.

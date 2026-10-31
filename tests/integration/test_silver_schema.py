@@ -67,7 +67,7 @@ def test_silver_ddl_types_roundtrip_rerun_and_restricted_identity(compose, tmp_p
         json.dumps(
             {
                 "catalogs": [{"user": "admin", "catalog": "hospital|identity", "allow": "all"}],
-                "schemas": [{"user": "admin", "schema": "silver|identity", "owner": True}],
+                "schemas": [{"user": "admin", "schema": "silver|identity|gold", "owner": True}],
                 "tables": [{"user": "admin", "privileges": ["OWNERSHIP", "SELECT", "INSERT"]}],
                 "impersonation": [],
             }
@@ -153,6 +153,10 @@ def test_silver_ddl_types_roundtrip_rerun_and_restricted_identity(compose, tmp_p
         execute(
             f"INSERT INTO identity.identity.patient_identity VALUES ('{token}', 'Test Patient')"
         )
+        # #46 aggregate releases: one synthetic cell each, no patient key.
+        execute("INSERT INTO hospital.gold.researcher_demographics VALUES ('40-49', 'F', NULL, 11)")
+        execute("INSERT INTO hospital.gold.researcher_geography VALUES ('021**', 11)")
+        execute("INSERT INTO hospital.gold.researcher_conditions VALUES ('00456', 11)")
         assert execute("SELECT birthdate, age_band, zip, race FROM hospital.silver.patients")[
             0
         ] == [["1980-02-29", "40-49", "02139", None]]
@@ -193,14 +197,15 @@ def test_silver_ddl_types_roundtrip_rerun_and_restricted_identity(compose, tmp_p
         compose("restart", "trino")
         compose("up", "-d", "--wait", "--no-deps", "trino")
         connect()
+        releases = {"researcher_demographics", "researcher_geography", "researcher_conditions"}
         for user in ("admin", "doctor_alice", "doctor_bob", "researcher", "billing"):
             for resource in locations:
                 table = resource.rsplit(".", 1)[-1]
                 allowed = {
-                    "admin": {"patients", "encounters", "claims", "care_team"},
+                    "admin": {"patients", "encounters", "claims", "care_team", *releases},
                     "doctor_alice": {"patients", "encounters"},
                     "doctor_bob": {"patients", "encounters"},
-                    "researcher": {"patients", "encounters"},
+                    "researcher": {"patients", "encounters", *releases},
                     "billing": {"claims"},
                 }
                 if table in allowed[user]:

@@ -153,9 +153,20 @@ def test_research_generalization_preserves_exact_stored_values_for_care():
         assert patients[column]["classification"] == "quasi_identifier"
     assert patients["birthdate"]["treatment"] == "keep"
     assert patients["birthdate"]["roles"]["researcher"] == "drop"
-    assert patients["age_band"]["roles"]["researcher"] == "keep"
+    # #46: research gets no row-level quasi-identifiers; only suppressed gold cells.
+    for column in ("age_band", "sex", "race", "ethnicity", "zip"):
+        assert patients[column]["roles"]["researcher"] == "drop"
+    assert TAGS["tables"]["encounters"]["reason_code"]["roles"]["researcher"] == "drop"
+    for table in ("researcher_demographics", "researcher_geography", "researcher_conditions"):
+        for tag in TAGS["tables"][table].values():
+            assert tag["treatment"] == "generalize"
+            assert tag["roles"] == {
+                "doctor": "drop",
+                "researcher": "keep",
+                "billing": "drop",
+                "admin": "keep",
+            }
     for table, column in (
-        ("patients", "zip"),
         ("encounters", "start_time"),
         ("encounters", "stop_time"),
     ):

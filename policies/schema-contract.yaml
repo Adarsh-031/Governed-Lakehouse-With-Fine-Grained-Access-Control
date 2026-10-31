@@ -66,3 +66,22 @@ tables:
       received_timestamp: TIMESTAMP(6)
       policy_version: VARCHAR
       policy_digest: VARCHAR
+  # Issue #46: aggregate-only researcher releases. Built by the trusted ETL from silver
+  # after every write; cells with fewer than 11 distinct patients are never published.
+  researcher_demographics:
+    resource: hospital.gold.researcher_demographics
+    columns:
+      age_band: VARCHAR
+      sex: VARCHAR
+      race: VARCHAR
+      patient_count: BIGINT
+  researcher_geography:
+    resource: hospital.gold.researcher_geography
+    columns:
+      zip_prefix: VARCHAR
+      patient_count: BIGINT
+  researcher_conditions:
+    resource: hospital.gold.researcher_conditions
+    columns:
+      reason_code: VARCHAR
+      patient_count: BIGINT

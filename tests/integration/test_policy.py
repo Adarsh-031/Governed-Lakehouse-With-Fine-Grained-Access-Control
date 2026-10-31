@@ -123,18 +123,20 @@ def test_clinical_matrix_filters_masks_and_denials(compose, tmp_path):
                             ):
                                 execute(sql, user, denied=True)
                         else:
+                            # arbitrary() keeps one row when a #46 release is empty.
                             result = execute(
-                                f"SELECT typeof({column}) FROM {resource} LIMIT 1", user
+                                f"SELECT typeof(arbitrary({column})) FROM {resource}", user
                             )
                             assert result == [[spec["columns"][column].lower()]]
                     # Trino 476 refuses a star projection containing a denied field.
                     hidden = any(r["visibility"] == "hidden" for r in decisions)
                     stars = execute(f"SELECT * FROM {resource} LIMIT 1", user, denied=hidden)
-                    if not hidden:
+                    if not hidden and stars:
                         assert len(stars[0]) == len(allowed)
-                    assert len(
-                        execute(f"SELECT {', '.join(allowed)} FROM {resource} LIMIT 1", user)[0]
-                    ) == len(allowed)
+                    projected = execute(
+                        f"SELECT {', '.join(allowed)} FROM {resource} LIMIT 1", user
+                    )
+                    assert all(len(row) == len(allowed) for row in projected)
                     shown = execute(f"SHOW COLUMNS FROM {resource}", user)
                     assert [r[0] for r in shown] == allowed
 
@@ -177,19 +179,31 @@ def test_clinical_matrix_filters_masks_and_denials(compose, tmp_path):
 
         # Literal mask outputs protect against accepting a syntactically valid but
         # ineffective mask. Use SQL typeof and string casts to retain microseconds.
-        for name, zip_value in zip(
-            boundary["tokens"],
-            ("021**", "021**", None, None, None, None, None, "999**", "000**"),
-            strict=True,
-        ):
-            assert execute(
-                f"SELECT zip FROM hospital.silver.patients WHERE patient_token='{boundary['tokens'][name]}'",
-                "researcher",
-            ) == [[zip_value]]
-        assert execute(
-            "SELECT CAST(start_time AS VARCHAR), stop_time, code, reason_code FROM hospital.silver.encounters WHERE encounter_id='issue18-alice'",
+        # #46: research cannot read row-level ZIP or reason codes at all; the
+        # nine boundary patients (one 00-09/F cohort) are below the release
+        # threshold and must never appear as a published cell.
+        execute(
+            f"SELECT zip FROM hospital.silver.patients WHERE patient_token='{boundary['tokens']['alice']}'",
             "researcher",
-        ) == [["2026-10-01 00:00:00.000000", None, "00123", "00456"]]
+            denied=True,
+        )
+        execute(
+            "SELECT reason_code FROM hospital.silver.encounters WHERE encounter_id='issue18-alice'",
+            "researcher",
+            denied=True,
+        )
+        for table in ("researcher_demographics", "researcher_geography", "researcher_conditions"):
+            counts = execute(f"SELECT patient_count FROM hospital.gold.{table}", "researcher")
+            assert all(row[0] >= 11 for row in counts), table
+            execute(f"SELECT patient_count FROM hospital.gold.{table}", "billing", denied=True)
+            execute(f"SELECT patient_count FROM hospital.gold.{table}", "doctor_alice", denied=True)
+        assert ["000**", 1] not in execute(
+            "SELECT zip_prefix, patient_count FROM hospital.gold.researcher_geography", "researcher"
+        )
+        assert execute(
+            "SELECT CAST(start_time AS VARCHAR), stop_time, code FROM hospital.silver.encounters WHERE encounter_id='issue18-alice'",
+            "researcher",
+        ) == [["2026-10-01 00:00:00.000000", None, "00123"]]
         assert execute(
             "SELECT CAST(stop_time AS VARCHAR) FROM hospital.silver.encounters WHERE encounter_id='issue18-bob'",
             "researcher",

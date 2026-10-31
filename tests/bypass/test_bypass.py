@@ -3,7 +3,6 @@
 import json
 import ssl
 import time
-from collections import Counter
 from datetime import UTC, datetime
 
 import httpx
@@ -191,10 +190,14 @@ def old_snapshot_query(attempt):
             leak=False,
         )
         resource = f"hospital.silver.{table} FOR VERSION AS OF {snapshot}"
-        columns = (
-            ["patient_token", "zip"] if table == "patients" else ["patient_token", "start_time"]
-        )
         for user in ("admin", "doctor_alice", "doctor_bob", "researcher"):
+            # #46: researcher has no row-level ZIP; check the token projection instead.
+            if table == "encounters":
+                columns = ["patient_token", "start_time"]
+            elif user == "researcher":
+                columns = ["patient_token"]
+            else:
+                columns = ["patient_token", "zip"]
             expected = [
                 row for row in oracle.rows(user, table, columns) if row[0] not in boundary_tokens
             ]
@@ -285,229 +288,223 @@ def metadata_enumeration(attempt):
         attempt.sql("SELECT * FROM identity.identity.patient_identity", user, denied=True)
 
 
-def aggregate_inference(attempt):
-    patient_columns = ["patient_token", "age_band", "sex", "zip"]
-    released_rows = attempt.sql(
-        "SELECT patient_token, age_band, sex, zip FROM hospital.silver.patients",
-        "researcher",
-    )
-    expected_patients = attempt.access.oracle.rows("researcher", "patients", patient_columns)
-    compare(attempt, released_rows, expected_patients, "patients", patient_columns)
-    released = [dict(zip(patient_columns, row, strict=True)) for row in released_rows]
-
-    encounter_columns = ["patient_token", "reason_code"]
-    encounter_rows = attempt.sql(
-        "SELECT patient_token, reason_code FROM hospital.silver.encounters",
-        "researcher",
-    )
-    expected_encounters = attempt.access.oracle.rows("researcher", "encounters", encounter_columns)
-    compare(
-        attempt,
-        encounter_rows,
-        expected_encounters,
-        "encounters",
-        encounter_columns,
-    )
-    encounter_features = [dict(zip(encounter_columns, row, strict=True)) for row in encounter_rows]
-
-    # Rare diagnosis signatures are built only from researcher-visible reason
-    # codes. Prevalence is per distinct patient, with a documented 5% threshold.
-    extended = with_rare_condition_signatures(released, encounter_features, threshold_percent=5)
-    qi_columns = ["age_band", "sex", "zip"]
-    extended_qi_columns = [*qi_columns, "rare_condition_signature"]
-    base_k = equivalence_class_metrics(released, qi_columns)
-    condition_k = equivalence_class_metrics(extended, extended_qi_columns)
-
-    # Compare a directly executed GROUP BY with the independent pre-write oracle.
-    source = attempt.access.oracle.rows("researcher", "patients", qi_columns)
-    expected = Counter(source)
-    grouped = attempt.sql(
-        "SELECT age_band, sex, zip, count(*) FROM hospital.silver.patients GROUP BY 1, 2, 3",
-        "researcher",
-    )
-    observed = {tuple(row[:3]): row[3] for row in grouped}
-    attempt.expect(
-        observed == expected,
-        expected="Aggregate cells match independent masked ground truth",
-        observed={"groups": len(observed)},
-    )
-
-    total = attempt.sql("SELECT count(*) FROM hospital.silver.patients", "researcher")[0][0]
-    target = attempt.access.oracle.boundary["tokens"]["alice"]
-    excluded = attempt.sql(
-        f"SELECT count(*) FROM hospital.silver.patients WHERE patient_token <> '{target}'",
-        "researcher",
-    )[0][0]
-    attempt.expect(
-        total == len(released) and total - excluded == 1,
-        expected="Ground truth confirms single-patient differencing",
-        observed={"total": total, "excluded": excluded, "difference": total - excluded},
-    )
-    aggregate_metrics = privacy_aggregate_metrics(released, quasi_identifiers=qi_columns)
-    attempt.observe(
-        population=len(released),
-        quasi_identifiers=qi_columns,
-        k_anonymity=base_k,
-        with_rare_condition_signature=condition_k,
-        aggregate_inference=aggregate_metrics,
-        live_group_by={"groups": len(observed), "exact_ground_truth_match": True},
-        exact_count_differencing={
-            "total": total,
-            "excluded": excluded,
-            "difference": total - excluded,
-            "single_patient_presence_reconstructed": True,
-        },
-    )
-    save_privacy_summary(
-        attempt,
-        "issue-24-aggregate-inference.json",
-        {
-            "issue": 24,
-            "case": "aggregate_inference",
-            "population": len(released),
-            "quasi_identifiers": qi_columns,
-            "rare_condition_definition": {
-                "field": "encounters.reason_code",
-                "unit": "distinct patients",
-                "threshold_percent": 5,
-                "threshold_count": "max(1, ceil(population * 0.05))",
-            },
-            "k_anonymity": base_k,
-            "k_anonymity_with_rare_condition_signature": condition_k,
-            "aggregate_inference": aggregate_metrics,
-            "live_group_by": {
-                "group_count": len(observed),
-                "exact_ground_truth_match": True,
-            },
-            "exact_count_differencing": {
-                "total_count": total,
-                "excluded_count": excluded,
-                "difference": total - excluded,
-                "single_patient_presence_reconstructed": True,
-            },
-        },
-    )
-    attempt.row.update(
-        status="leaked",
-        reason=(
-            "Measured residual disclosure: singleton quasi-identifier classes and "
-            "exact count differencing can expose synthetic patient presence. "
-            "These measurements are not an anonymity guarantee."
-        ),
-    )
+RELEASES = {
+    "researcher_demographics": ["age_band", "sex", "race", "patient_count"],
+    "researcher_geography": ["zip_prefix", "patient_count"],
+    "researcher_conditions": ["reason_code", "patient_count"],
+}
+MIN_CELL = 11
+FORMER_QIS = ["age_band", "sex", "zip"]
+RARE_CONDITION = {
+    "field": "encounters.reason_code",
+    "unit": "distinct patients",
+    "threshold_percent": 5,
+    "threshold_count": "max(1, ceil(population * 0.05))",
+}
 
 
-def quasi_identifier_linkage(attempt):
-    patient_columns = ["patient_token", "age_band", "sex", "zip"]
-    released_rows = attempt.sql(
-        "SELECT patient_token, age_band, sex, zip FROM hospital.silver.patients",
-        "researcher",
-    )
-    compare(
-        attempt,
-        released_rows,
-        attempt.access.oracle.rows("researcher", "patients", patient_columns),
-        "patients",
-        patient_columns,
-    )
-    released = [dict(zip(patient_columns, row, strict=True)) for row in released_rows]
-
-    encounter_columns = ["patient_token", "reason_code"]
-    encounter_rows = attempt.sql(
-        "SELECT patient_token, reason_code FROM hospital.silver.encounters",
-        "researcher",
-    )
-    compare(
-        attempt,
-        encounter_rows,
-        attempt.access.oracle.rows("researcher", "encounters", encounter_columns),
-        "encounters",
-        encounter_columns,
-    )
-    released_encounters = [dict(zip(encounter_columns, row, strict=True)) for row in encounter_rows]
-
-    # The auxiliary file is derived from the independent pre-write source
-    # oracle. The token is used only to score the attack, never as a QI.
-    auxiliary = [
+def former_projection(oracle):
+    """The pre-#46 researcher view, rebuilt from the independent oracle (no live query)."""
+    return [
         {
             "patient_token": row["patient_token"],
             "age_band": row["age_band"],
             "sex": row["sex"],
             "zip": masked_value("patients", "zip", row["zip"]),
         }
-        for row in attempt.access.oracle.data["patients"]
+        for row in oracle.data["patients"]
     ]
-    auxiliary_encounters = attempt.access.oracle.data["encounters"]
-    released_with_conditions = with_rare_condition_signatures(
-        released, released_encounters, threshold_percent=5
-    )
-    auxiliary_with_conditions = with_rare_condition_signatures(
-        auxiliary, auxiliary_encounters, threshold_percent=5
-    )
 
-    base_qis = ["age_band", "sex", "zip"]
-    extended_qis = [*base_qis, "rare_condition_signature"]
-    base_metrics = quasi_identifier_linkage_metrics(released, auxiliary, quasi_identifiers=base_qis)
-    extended_metrics = quasi_identifier_linkage_metrics(
-        released_with_conditions,
-        auxiliary_with_conditions,
-        quasi_identifiers=extended_qis,
-    )
-    attempt.observe(
-        quasi_identifiers=base_qis,
-        metrics=base_metrics,
-        with_rare_condition_signature=extended_metrics,
-        rare_condition_definition={
-            "source": "researcher-visible encounters.reason_code",
-            "prevalence_unit": "distinct patients",
-            "threshold_percent": 5,
-            "threshold_count": "max(1, ceil(population * 0.05))",
+
+def read_releases(attempt):
+    """Read every #46 release as researcher; exact oracle match and >= 11 per cell."""
+    summary = {}
+    for table, columns in RELEASES.items():
+        rows = attempt.sql(f"SELECT {', '.join(columns)} FROM hospital.gold.{table}", "researcher")
+        compare(
+            attempt, rows, attempt.access.oracle.rows("researcher", table, columns), table, columns
+        )
+        counts = [row[-1] for row in rows]
+        attempt.expect(
+            all(count >= MIN_CELL for count in counts),
+            expected=f"Every published cell has at least {MIN_CELL} patients",
+            observed={"table": table, "cells": len(rows), "min_count": min(counts, default=None)},
+        )
+        shown = [
+            row[0] for row in attempt.sql(f"SHOW COLUMNS FROM hospital.gold.{table}", "researcher")
+        ]
+        attempt.expect(
+            "patient_token" not in shown,
+            expected="Release has no record-level key to exclude one patient",
+            observed={"table": table, "columns": shown},
+        )
+        summary[table] = {
+            "published_cells": len(rows),
+            "min_patient_count": min(counts, default=None),
+            "patients_in_published_cells": sum(counts),
+        }
+    return summary
+
+
+def aggregate_inference(attempt):
+    oracle = attempt.access.oracle
+    population = len(oracle.data["patients"])
+    # Before #46: what the former row-level researcher projection exposed.
+    former = former_projection(oracle)
+    before = {
+        "k_anonymity": equivalence_class_metrics(former, FORMER_QIS),
+        "k_anonymity_with_rare_condition_signature": equivalence_class_metrics(
+            with_rare_condition_signatures(former, oracle.data["encounters"], threshold_percent=5),
+            [*FORMER_QIS, "rare_condition_signature"],
+        ),
+        "aggregate_inference": privacy_aggregate_metrics(former, quasi_identifiers=FORMER_QIS),
+    }
+    # After #46: the same attack queries are denied for the researcher.
+    target = oracle.boundary["tokens"]["alice"]
+    for statement in (
+        "SELECT patient_token, age_band, sex, zip FROM hospital.silver.patients",
+        "SELECT age_band, sex, zip, count(*) FROM hospital.silver.patients GROUP BY 1, 2, 3",
+        f"SELECT count(*) FROM hospital.silver.patients WHERE age_band = '00-09' AND patient_token <> '{target}'",
+        "SELECT patient_token, reason_code FROM hospital.silver.encounters",
+        "SELECT reason_code, count(DISTINCT patient_token) FROM hospital.silver.encounters GROUP BY 1",
+    ):
+        attempt.sql(statement, "researcher", denied=True)
+    releases = read_releases(attempt)
+    after = {
+        "row_level_quasi_identifiers_visible": [],
+        "releases": releases,
+        "min_published_cell": min(
+            (r["min_patient_count"] for r in releases.values() if r["min_patient_count"]),
+            default=None,
+        ),
+        "exact_count_differencing": (
+            "not possible: releases have no patient key or record-level predicate, and "
+            "any cell that would fall below the threshold is absent rather than counted"
+        ),
+    }
+    attempt.observe(population=population, before_mitigation=before, after_mitigation=after)
+    save_privacy_summary(
+        attempt,
+        "issue-24-aggregate-inference.json",
+        {
+            "issue": [24, 46],
+            "case": "aggregate_inference",
+            "population": population,
+            "min_cell": MIN_CELL,
+            "quasi_identifiers_before": FORMER_QIS,
+            "rare_condition_definition": RARE_CONDITION,
+            "before_mitigation": before,
+            "after_mitigation": after,
         },
-        attacker_model=(
-            "Exact auxiliary age band, sex, masked ZIP prefix and uncommon "
-            "researcher-visible reason-code signatures; synthetic population only."
+    )
+    attempt.row.update(
+        status="blocked",
+        reason=(
+            "Mitigated by #46: row-level quasi-identifiers and reason codes are denied to "
+            f"research; aggregate releases publish only cells with >= {MIN_CELL} patients "
+            "and carry no patient key. Before/after metrics are in the private report."
         ),
     )
+
+
+def quasi_identifier_linkage(attempt):
+    oracle = attempt.access.oracle
+    # Attacker's auxiliary data: exact age band, sex, ZIP prefix and rare conditions.
+    auxiliary = former_projection(oracle)
+    auxiliary_extended = with_rare_condition_signatures(
+        auxiliary, oracle.data["encounters"], threshold_percent=5
+    )
+    extended_qis = [*FORMER_QIS, "rare_condition_signature"]
+    # Before #46 the researcher saw exactly these values row by row.
+    before = {
+        "baseline_linkage": quasi_identifier_linkage_metrics(
+            auxiliary, auxiliary, quasi_identifiers=FORMER_QIS
+        ),
+        "linkage_with_rare_condition_signature": quasi_identifier_linkage_metrics(
+            auxiliary_extended, auxiliary_extended, quasi_identifiers=extended_qis
+        ),
+    }
+    # After #46: no researcher-visible row carries any linkage key.
+    visible = {
+        table: [
+            row[0]
+            for row in attempt.sql(f"SHOW COLUMNS FROM hospital.silver.{table}", "researcher")
+        ]
+        for table in ("patients", "encounters")
+    }
+    exposed = (set(FORMER_QIS) | {"race", "ethnicity", "birthdate"}) & set(visible["patients"])
+    exposed |= {"reason_code", "reason_description"} & set(visible["encounters"])
+    attempt.expect(
+        not exposed,
+        expected="No row-level quasi-identifier or reason code visible to research",
+        observed=visible,
+    )
+    attempt.sql(
+        "SELECT patient_token, age_band, sex, zip FROM hospital.silver.patients",
+        "researcher",
+        denied=True,
+    )
+    attempt.sql(
+        "SELECT patient_token, reason_code FROM hospital.silver.encounters",
+        "researcher",
+        denied=True,
+    )
+    tokens = [
+        row[0]
+        for row in attempt.sql("SELECT patient_token FROM hospital.silver.patients", "researcher")
+    ]
+    released_now = [{"patient_token": token, **dict.fromkeys(FORMER_QIS)} for token in tokens]
+    released_now_extended = [{**row, "rare_condition_signature": None} for row in released_now]
+    releases = read_releases(attempt)
+    min_cell = min(
+        (r["min_patient_count"] for r in releases.values() if r["min_patient_count"]),
+        default=None,
+    )
+    after = {
+        "baseline_linkage": quasi_identifier_linkage_metrics(
+            released_now, auxiliary, quasi_identifiers=FORMER_QIS
+        ),
+        "linkage_with_rare_condition_signature": quasi_identifier_linkage_metrics(
+            released_now_extended, auxiliary_extended, quasi_identifiers=extended_qis
+        ),
+        "release_best_case_match_precision_percent": (100.0 / min_cell if min_cell else None),
+    }
+    attempt.observe(before_mitigation=before, after_mitigation=after, visible_columns=visible)
     save_privacy_summary(
         attempt,
         "issue-24-quasi-identifier-linkage.json",
         {
-            "issue": 24,
+            "issue": [24, 46],
             "case": "quasi_identifier_linkage",
             "population": len(auxiliary),
-            "baseline_quasi_identifiers": base_qis,
-            "baseline_linkage": base_metrics,
-            "extended_quasi_identifiers": extended_qis,
-            "linkage_with_rare_condition_signature": extended_metrics,
-            "rare_condition_definition": {
-                "source": "researcher-visible encounters.reason_code",
-                "prevalence_unit": "distinct patients",
-                "threshold_percent": 5,
-                "threshold_count": "max(1, ceil(population * 0.05))",
-            },
+            "min_cell": MIN_CELL,
+            "quasi_identifiers": extended_qis,
+            "rare_condition_definition": RARE_CONDITION,
+            "before_mitigation": before,
+            "after_mitigation": after,
             "attacker_model": (
-                "Exact auxiliary age band, sex, masked ZIP prefix and uncommon "
-                "researcher-visible reason-code signatures; synthetic population only."
+                "Exact auxiliary age band, sex, ZIP prefix and uncommon reason-code "
+                "signatures; synthetic population only."
             ),
         },
     )
-    if base_metrics["correct_links"] or extended_metrics["correct_links"]:
-        attempt.row.update(
-            status="leaked",
-            reason=(
-                "Measured residual linkage risk: unique released quasi-identifiers "
-                "match synthetic ground-truth patients under the stated auxiliary "
-                "data model. The deterministic token is used only to score matches."
-            ),
-        )
-    else:
-        attempt.row.update(
-            status="inconclusive",
-            reason=(
-                "No unique correct links in this synthetic population under the "
-                "tested auxiliary model; this does not prove anonymity."
-            ),
-        )
+    linked = (
+        after["baseline_linkage"]["correct_links"]
+        + after["linkage_with_rare_condition_signature"]["correct_links"]
+    )
+    attempt.expect(
+        linked == 0,
+        expected="No unique correct links after mitigation",
+        observed={"correct_links": linked},
+    )
+    attempt.row.update(
+        status="blocked",
+        reason=(
+            "Mitigated by #46: research rows carry only the pseudonymous token, so the "
+            "auxiliary quasi-identifiers match nothing; aggregate cells hold at least "
+            f"{MIN_CELL} patients. Synthetic population only; not an anonymity proof."
+        ),
+    )
 
 
 def audit_collector_outage(attempt):

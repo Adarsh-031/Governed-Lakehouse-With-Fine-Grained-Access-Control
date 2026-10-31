@@ -39,31 +39,28 @@ tables:
     age_band:
       classification: quasi_identifier
       treatment: generalize
-      roles: {doctor: keep, researcher: keep, billing: drop, admin: keep}
+      roles: {doctor: keep, researcher: drop, billing: drop, admin: keep}
       rationale: "Derive completed-calendar-year bands 00-09 through 80-89 and 90+; NULL/future birthdates yield NULL."
     sex:
       classification: quasi_identifier
       treatment: keep
-      roles: {doctor: keep, researcher: keep, billing: drop, admin: keep}
+      roles: {doctor: keep, researcher: drop, billing: drop, admin: keep}
       rationale: "Demographic linkage risk remains when combined with age, geography, or clinical records."
     race:
       classification: quasi_identifier
       treatment: keep
-      roles: {doctor: keep, researcher: keep, billing: drop, admin: keep}
+      roles: {doctor: keep, researcher: drop, billing: drop, admin: keep}
       rationale: "Demographic linkage risk remains; visible only in approved clinical and research projections."
     ethnicity:
       classification: quasi_identifier
       treatment: keep
-      roles: {doctor: keep, researcher: keep, billing: drop, admin: keep}
+      roles: {doctor: keep, researcher: drop, billing: drop, admin: keep}
       rationale: "Demographic linkage risk remains; visible only in approved clinical and research projections."
     zip:
       classification: quasi_identifier
       treatment: keep
-      roles: {doctor: keep, researcher: generalize, billing: drop, admin: keep}
-      masks:
-        researcher: >-
-          CASE WHEN length(zip) IN (5, 10) AND regexp_like(zip, '^[0-9]{5}(-[0-9]{4})?$') THEN substr(zip, 1, 3) || '**' ELSE CAST(NULL AS VARCHAR) END
-      rationale: "Preserve exact ZIP for care; research gets three digits plus ** or NULL for invalid/non-US values."
+      roles: {doctor: keep, researcher: drop, billing: drop, admin: keep}
+      rationale: "Preserve exact ZIP for care. Research sees only gold.researcher_geography (three digits plus ** with >= 11 patients per cell, #46)."
   encounters:
     encounter_id:
       classification: identifier
@@ -109,7 +106,7 @@ tables:
     reason_code:
       classification: sensitive_clinical
       treatment: keep
-      roles: {doctor: keep, researcher: keep, billing: drop, admin: keep}
+      roles: {doctor: keep, researcher: drop, billing: drop, admin: keep}
       rationale: "Visit-reason codes can disclose sensitive conditions; retain for approved care and research."
     reason_description:
       classification: sensitive_clinical
@@ -270,3 +267,47 @@ tables:
       treatment: keep
       roles: {doctor: drop, researcher: drop, billing: drop, admin: keep}
       rationale: "Digest of policy configuration, not a patient identifier or secret; admin-only audit access still applies."
+  # Issue #46: aggregate-only research releases built by the trusted ETL from silver.
+  researcher_demographics:
+    age_band:
+      classification: quasi_identifier
+      treatment: generalize
+      roles: {doctor: drop, researcher: keep, billing: drop, admin: keep}
+      rationale: "Published only as part of a cell with at least 11 distinct patients; no row-level demographics reach research."
+    sex:
+      classification: quasi_identifier
+      treatment: generalize
+      roles: {doctor: drop, researcher: keep, billing: drop, admin: keep}
+      rationale: "Published only as part of a cell with at least 11 distinct patients."
+    race:
+      classification: quasi_identifier
+      treatment: generalize
+      roles: {doctor: drop, researcher: keep, billing: drop, admin: keep}
+      rationale: "Published only as part of a cell with at least 11 distinct patients."
+    patient_count:
+      classification: none
+      treatment: generalize
+      roles: {doctor: drop, researcher: keep, billing: drop, admin: keep}
+      rationale: "Distinct-patient count per released cell; always >= 11 because smaller cells are suppressed."
+  researcher_geography:
+    zip_prefix:
+      classification: quasi_identifier
+      treatment: generalize
+      roles: {doctor: drop, researcher: keep, billing: drop, admin: keep}
+      rationale: "Three ZIP digits plus ** (NULL for invalid/non-US), published only for cells with at least 11 patients."
+    patient_count:
+      classification: none
+      treatment: generalize
+      roles: {doctor: drop, researcher: keep, billing: drop, admin: keep}
+      rationale: "Distinct-patient count per released cell; always >= 11 because smaller cells are suppressed."
+  researcher_conditions:
+    reason_code:
+      classification: sensitive_clinical
+      treatment: generalize
+      roles: {doctor: drop, researcher: keep, billing: drop, admin: keep}
+      rationale: "Coded encounter reason, published only when at least 11 distinct patients share it, so rare conditions cannot single out a person."
+    patient_count:
+      classification: none
+      treatment: generalize
+      roles: {doctor: drop, researcher: keep, billing: drop, admin: keep}
+      rationale: "Distinct patients with the reason code; always >= 11 because smaller cells are suppressed."

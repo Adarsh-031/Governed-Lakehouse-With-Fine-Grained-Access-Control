@@ -8,7 +8,9 @@ and synthetic row-filter/mask enforcement. Reproducible Synthea CSV generation
 and public MIMIC-IV demo acquisition are available. Synthea-to-silver Iceberg
 ingestion includes seeded care-team assignments, saved doctor patient sets, and
 ETL-only restricted identity. Clinical file policies implement role SELECT grants,
-doctor care-team row filters, hidden columns and researcher masks. DDL is available
+doctor care-team row filters, hidden columns, researcher masks and aggregate-only
+researcher releases (`hospital.gold`, cells of at least 11 patients; see
+[#46](docs/issue-46.md)). DDL is available
 with isolated Trino/Iceberg acceptance coverage; see [schema setup](sql/schema/README.md).
 
 ## Goal
