@@ -50,6 +50,34 @@ A green run therefore means the investigation executed as specified; it does
 not mean every attempted disclosure was blocked. Create a follow-up issue for
 any new leaked case and retain its link with that run's private evidence.
 
+## Issue #24: researcher privacy risk
+
+The two researcher-risk cases now report minimum equivalence-class size (`k_min`),
+singleton-record percentage, small-cell counts, exact count differencing, and
+auxiliary-data linkage with and without rare-condition signatures. The signature
+uses researcher-visible `encounters.reason_code` values whose distinct-patient
+prevalence is no more than `max(1, ceil(N * 0.05))`. This is an attack-model
+feature, not a masking or suppression control.
+
+For a 1,000-patient Synthea source run, generate the pinned seeded data first:
+
+```sh
+./scripts/generate_synthea.sh --patients 1000 --seed 42
+ACCESS_TEST_SOURCE="$PWD/data/raw/synthea/1000-seed42" \
+  RUN_BYPASS_INTEGRATION=1 uv run --locked --group dev \
+  pytest tests/bypass -v --strict-config --strict-markers
+```
+
+CI performs this generation and runs the complete bypass suite on the 1,000-patient
+source. The fixture adds boundary patients, so use the population count recorded
+in the run rather than assuming the final denominator is exactly 1,000. CI uploads
+only aggregate-only `issue-24-*.json` summaries for review; the full private
+report and row-level evidence remain unshared.
+
+The stable `cases.csv` is still an inventory with `not_run` statuses. The
+generated per-run `cases.csv` holds measured statuses, reasons and evidence.
+See the [issue #24 methodology and prior baseline](../../docs/issue-24.md).
+
 ## Coverage and limits
 
 Backend probes bypass network isolation deliberately. An authenticated read of

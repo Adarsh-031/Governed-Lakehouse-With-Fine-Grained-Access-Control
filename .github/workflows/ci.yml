@@ -18,7 +18,9 @@ jobs:
   quality:
     name: Code and configuration checks
     runs-on: instabox-medium
-    timeout-minutes: 30
+    timeout-minutes: 45
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
 
     steps:
       - name: Checkout repository
@@ -76,6 +78,18 @@ jobs:
                   print(f"Valid YAML: {path}")
           PY
 
+      - name: Run unit tests
+        # Includes the schema/classification/access-contract drift checks.
+        run: uv run --no-sync pytest tests/unit -v --strict-config --strict-markers --junitxml=unit-test-results.xml
+
+      # Configure these repository Actions secrets to avoid Docker Hub's anonymous pull limit.
+      - name: Log in to Docker Hub
+        if: env.DOCKERHUB_USERNAME != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Verify private storage and service permissions
         env:
           RUN_STORAGE_INTEGRATION: "1"
@@ -96,9 +110,6 @@ jobs:
           RUN_AUDIT_INTEGRATION: "1"
         run: uv run --no-sync pytest tests/integration/test_audit.py -v --strict-config
 
-      - name: Run unit tests
-        # Includes the schema/classification/access-contract drift checks.
-        run: uv run --no-sync pytest tests/unit -v --strict-config --strict-markers --junitxml=unit-test-results.xml
 
       - name: Verify clinical access matrix, doctor filters, masks and denials
         env:
@@ -110,10 +121,29 @@ jobs:
           RUN_ACCESS_INTEGRATION: "1"
         run: uv run --no-sync pytest tests/access -v --strict-config --strict-markers --junitxml=access-test-results.xml
 
-      - name: Investigate every bypass case and retain private evidence
+      - name: Install Java 17 for the reproducible Synthea privacy cohort
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Generate the seeded 1,000-patient Synthea privacy cohort
+        run: uv run --no-sync python scripts/source_data.py synthea --patients 1000 --seed 42
+
+      - name: Investigate every bypass case on the 1,000-patient cohort
         env:
           RUN_BYPASS_INTEGRATION: "1"
+          ACCESS_TEST_SOURCE: ${{ github.workspace }}/data/raw/synthea/1000-seed42
         run: uv run --no-sync pytest tests/bypass -v --strict-config --strict-markers --junitxml=bypass-test-results.xml
+
+      - name: Publish aggregate-only issue #24 privacy metrics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: issue-24-privacy-metrics
+          path: results/raw/bypass-*/issue-24-*.json
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Verify silver and restricted identity DDL on Trino and Iceberg
         env:
