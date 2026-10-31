@@ -10,4 +10,4 @@ join_or_view_bypass,no additional access,query and result comparison,not_run,
 metadata_enumeration,no sensitive leakage,metadata results,not_run,
 aggregate_inference,residual risk measured,synthetic ground truth comparison,not_run,https://github.com/Adarsh-031/Governed-Lakehouse-With-Fine-Grained-Access-Control/issues/46
 quasi_identifier_linkage,residual risk measured,uniqueness and linkage rates,not_run,https://github.com/Adarsh-031/Governed-Lakehouse-With-Fine-Grained-Access-Control/issues/46
-audit_collector_outage,missing events quantified,known query ID reconciliation,not_run,
+audit_collector_outage,measure query-level coverage and quantify outage loss or recovery,issued Trino query IDs versus created/completed audit rows plus missing/duplicate counts and UTC outage window,not_run,
