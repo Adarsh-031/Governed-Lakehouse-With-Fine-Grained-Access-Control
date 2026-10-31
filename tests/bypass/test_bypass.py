@@ -291,24 +291,16 @@ def aggregate_inference(attempt):
         "SELECT patient_token, age_band, sex, zip FROM hospital.silver.patients",
         "researcher",
     )
-    expected_patients = attempt.access.oracle.rows(
-        "researcher", "patients", patient_columns
-    )
-    compare(
-        attempt, released_rows, expected_patients, "patients", patient_columns
-    )
-    released = [
-        dict(zip(patient_columns, row, strict=True)) for row in released_rows
-    ]
+    expected_patients = attempt.access.oracle.rows("researcher", "patients", patient_columns)
+    compare(attempt, released_rows, expected_patients, "patients", patient_columns)
+    released = [dict(zip(patient_columns, row, strict=True)) for row in released_rows]
 
     encounter_columns = ["patient_token", "reason_code"]
     encounter_rows = attempt.sql(
         "SELECT patient_token, reason_code FROM hospital.silver.encounters",
         "researcher",
     )
-    expected_encounters = attempt.access.oracle.rows(
-        "researcher", "encounters", encounter_columns
-    )
+    expected_encounters = attempt.access.oracle.rows("researcher", "encounters", encounter_columns)
     compare(
         attempt,
         encounter_rows,
@@ -316,15 +308,11 @@ def aggregate_inference(attempt):
         "encounters",
         encounter_columns,
     )
-    encounter_features = [
-        dict(zip(encounter_columns, row, strict=True)) for row in encounter_rows
-    ]
+    encounter_features = [dict(zip(encounter_columns, row, strict=True)) for row in encounter_rows]
 
     # Rare diagnosis signatures are built only from researcher-visible reason
     # codes. Prevalence is per distinct patient, with a documented 5% threshold.
-    extended = with_rare_condition_signatures(
-        released, encounter_features, threshold_percent=5
-    )
+    extended = with_rare_condition_signatures(released, encounter_features, threshold_percent=5)
     qi_columns = ["age_band", "sex", "zip"]
     extended_qi_columns = [*qi_columns, "rare_condition_signature"]
     base_k = equivalence_class_metrics(released, qi_columns)
@@ -355,9 +343,7 @@ def aggregate_inference(attempt):
         expected="Ground truth confirms single-patient differencing",
         observed={"total": total, "excluded": excluded, "difference": total - excluded},
     )
-    aggregate_metrics = privacy_aggregate_metrics(
-        released, quasi_identifiers=qi_columns
-    )
+    aggregate_metrics = privacy_aggregate_metrics(released, quasi_identifiers=qi_columns)
     attempt.observe(
         population=len(released),
         quasi_identifiers=qi_columns,
@@ -424,9 +410,7 @@ def quasi_identifier_linkage(attempt):
         "patients",
         patient_columns,
     )
-    released = [
-        dict(zip(patient_columns, row, strict=True)) for row in released_rows
-    ]
+    released = [dict(zip(patient_columns, row, strict=True)) for row in released_rows]
 
     encounter_columns = ["patient_token", "reason_code"]
     encounter_rows = attempt.sql(
@@ -440,9 +424,7 @@ def quasi_identifier_linkage(attempt):
         "encounters",
         encounter_columns,
     )
-    released_encounters = [
-        dict(zip(encounter_columns, row, strict=True)) for row in encounter_rows
-    ]
+    released_encounters = [dict(zip(encounter_columns, row, strict=True)) for row in encounter_rows]
 
     # The auxiliary file is derived from the independent pre-write source
     # oracle. The token is used only to score the attack, never as a QI.
@@ -465,9 +447,7 @@ def quasi_identifier_linkage(attempt):
 
     base_qis = ["age_band", "sex", "zip"]
     extended_qis = [*base_qis, "rare_condition_signature"]
-    base_metrics = quasi_identifier_linkage_metrics(
-        released, auxiliary, quasi_identifiers=base_qis
-    )
+    base_metrics = quasi_identifier_linkage_metrics(released, auxiliary, quasi_identifiers=base_qis)
     extended_metrics = quasi_identifier_linkage_metrics(
         released_with_conditions,
         auxiliary_with_conditions,
