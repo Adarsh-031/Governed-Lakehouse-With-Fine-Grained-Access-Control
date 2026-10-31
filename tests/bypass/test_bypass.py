@@ -14,6 +14,7 @@ from tests.access.oracle import USERS, assert_rows, decisions, masked_value
 from tests.access.test_access import forbidden_operations
 from tests.integration.test_trino import query
 
+from .privacy import k_anonymity_metrics, rare_reason_code_profiles
 from .report import linkage_metrics, load_cases
 
 
@@ -268,82 +269,323 @@ def metadata_enumeration(attempt):
         attempt.sql("SELECT * FROM identity.identity.patient_identity", user, denied=True)
 
 
+def _privacy_source_population(attempt):
+    """Return the Synthea source population, excluding the nine boundary fixtures."""
+    oracle = attempt.access.oracle
+    boundary_tokens = set(oracle.boundary["tokens"].values())
+    source_patients = [
+        row for row in oracle.data["patients"]
+        if row.get("patient_token") not in boundary_tokens
+    ]
+    source_encounters = [
+        row for row in oracle.data["encounters"]
+        if row.get("patient_token") not in boundary_tokens
+    ]
+    if not source_patients:
+        raise AssertionError("No source patients are available for privacy measurement")
+
+    source_dir = Path(
+        os.environ.get(
+            "ACCESS_TEST_SOURCE",
+            Path(__file__).resolve().parents[1] / "fixtures" / "synthea",
+        )
+    ).resolve()
+    manifest = json.loads((source_dir / "manifest.json").read_text(encoding="utf-8"))
+    return source_patients, source_encounters, boundary_tokens, manifest
+
+
+def _privacy_evidence(attempt, case_name, metrics):
+    """Write aggregate-only evidence for scale CI; patient-level data stays private."""
+    path = attempt.report.directory / "privacy-risk-summary.json"
+    payload = json.loads(path.read_text()) if path.exists() else {
+        "scope": (
+            "Synthea source patients only; adversarial policy-boundary fixture "
+            "patients excluded. Synthetic measurements are not real-world rates."
+        ),
+        "cases": {},
+    }
+    payload["source"] = metrics.pop("source")
+    payload["cases"][case_name] = metrics
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.chmod(0o600)
+
+
 def aggregate_inference(attempt):
-    columns = ["age_band", "sex", "zip"]
-    source = attempt.access.oracle.rows("researcher", "patients", columns)
-    expected = Counter(source)
-    rows = attempt.sql(
-        "SELECT age_band, sex, zip, count(*) FROM hospital.silver.patients GROUP BY 1, 2, 3",
+    source_patients, source_encounters, boundary_tokens, manifest = (
+        _privacy_source_population(attempt)
+    )
+    population = len(source_patients)
+    excluded_sql = (
+        "TRUE" if not boundary_tokens else
+        "patient_token NOT IN (" + ", ".join(f"'{token}'" for token in sorted(boundary_tokens)) + ")"
+    )
+
+    source_records = [
+        {
+            "patient_token": row["patient_token"],
+            "age_band": row.get("age_band"),
+            "sex": row.get("sex"),
+            "zip": masked_value("patients", "zip", row.get("zip")),
+        }
+        for row in source_patients
+    ]
+    profiles, rare_summary = rare_reason_code_profiles(
+        source_patients, source_encounters, rare_threshold=5
+    )
+    rare_by_token = {
+        row["patient_token"]: row["rare_reason_codes"] for row in profiles
+    }
+    for row in source_records:
+        row["rare_reason_codes"] = rare_by_token[row["patient_token"]]
+
+    # Independent source oracle: exact aggregates over the source patients only.
+    expected_groups = Counter(
+        (row["age_band"], row["sex"], row["zip"]) for row in source_records
+    )
+    sql_groups = attempt.sql(
+        "SELECT age_band, sex, zip, count(*) "
+        f"FROM hospital.silver.patients WHERE {excluded_sql} "
+        "GROUP BY 1, 2, 3",
         "researcher",
     )
-    observed = {tuple(row[:3]): row[3] for row in rows}
+    observed_groups = {tuple(row[:3]): row[3] for row in sql_groups}
     attempt.expect(
-        observed == expected,
-        expected="Aggregate cells match independent masked ground truth",
-        observed={"groups": len(observed)},
+        observed_groups == expected_groups,
+        expected="Source-only demographic aggregates match independent masked ground truth",
+        observed={"source_patients": population, "aggregate_groups": len(observed_groups)},
     )
-    total = attempt.sql("SELECT count(*) FROM hospital.silver.patients", "researcher")[0][0]
-    target = attempt.access.oracle.boundary["tokens"]["alice"]
+
+    # A separate query validates that the rare-code prevalence calculation uses
+    # the researcher-visible reason_code field, counting distinct patients.
+    expected_prevalence = Counter()
+    for row in source_encounters:
+        if row.get("reason_code") is not None:
+            expected_prevalence[str(row["reason_code"]).strip()] += 0
+    code_patients = {}
+    for row in source_encounters:
+        code = row.get("reason_code")
+        if code is not None and str(code).strip():
+            code_patients.setdefault(str(code).strip(), set()).add(row["patient_token"])
+    expected_prevalence = sorted(
+        (code, len(tokens)) for code, tokens in code_patients.items()
+    )
+    observed_prevalence = attempt.sql(
+        "SELECT reason_code, count(DISTINCT patient_token) "
+        f"FROM hospital.silver.encounters WHERE {excluded_sql} "
+        "AND reason_code IS NOT NULL "
+        "GROUP BY reason_code ORDER BY reason_code",
+        "researcher",
+    )
+    attempt.expect(
+        sorted((str(row[0]), row[1]) for row in observed_prevalence) == expected_prevalence,
+        expected="Distinct-patient reason-code prevalence matches source oracle",
+        observed={"distinct_reason_codes": len(observed_prevalence)},
+    )
+
+    qi_sets = {
+        "age_band_sex": ("age_band", "sex"),
+        "age_band_sex_masked_zip": ("age_band", "sex", "zip"),
+        "age_band_sex_masked_zip_rare_reason_codes": (
+            "age_band", "sex", "zip", "rare_reason_codes"
+        ),
+    }
+    k_metrics = {}
+    for name, columns in qi_sets.items():
+        all_records = k_anonymity_metrics(source_records, columns, threshold=5)
+        complete_records = [
+            row for row in source_records
+            if all(row.get(column) is not None for column in columns)
+        ]
+        k_metrics[name] = {
+            "all_records": all_records,
+            "complete_case_only": k_anonymity_metrics(
+                complete_records, columns, threshold=5
+            ),
+        }
+
+    selected_token = sorted(row["patient_token"] for row in source_patients)[0]
+    total = attempt.sql(
+        "SELECT count(*) FROM hospital.silver.patients "
+        f"WHERE {excluded_sql}",
+        "researcher",
+    )[0][0]
     excluded = attempt.sql(
-        f"SELECT count(*) FROM hospital.silver.patients WHERE patient_token <> '{target}'",
+        "SELECT count(*) FROM hospital.silver.patients "
+        f"WHERE {excluded_sql} AND patient_token <> '{selected_token}'",
         "researcher",
     )[0][0]
     attempt.expect(
-        total == len(source) and total - excluded == 1,
-        expected="Ground truth confirms single-patient differencing",
-        observed={"total": total, "excluded": excluded, "difference": total - excluded},
+        total == population and total - excluded == 1,
+        expected="Exact-count differencing identifies a single selected source record",
+        observed={"source_population": total, "count_after_exclusion": excluded},
     )
-    singletons = sum(count == 1 for count in observed.values())
-    attempt.observe(
-        population=len(source),
-        singleton_groups=singletons,
-        singleton_rate=singletons / len(source),
-        differencing_disclosure=True,
+
+    groups_below_five = sum(
+        1 for count in expected_groups.values() if count < 5
     )
-    attempt.row.update(
-        status="leaked",
-        reason="Measured residual inference risk: exact counts permit single-patient differencing; no suppression or privacy budget is implemented.",
+    records_in_small_groups = sum(
+        count for count in expected_groups.values() if count < 5
     )
+    summary = {
+        "source": {
+            "source": manifest.get("parameters", {}).get("source", "unknown"),
+            "source_version": manifest.get("parameters", {}).get("version"),
+            "population_requested": manifest.get("parameters", {}).get("population"),
+            "population_measured": population,
+            "seed": manifest.get("parameters", {}).get("seed"),
+            "reference_date": manifest.get("parameters", {}).get("reference_date"),
+            "boundary_fixture_patients_excluded": len(boundary_tokens),
+        },
+        "quasi_identifier_metrics": k_metrics,
+        "rare_reason_code_summary": rare_summary,
+        "aggregate_inference": {
+            "source_population": population,
+            "demographic_aggregate_groups": len(expected_groups),
+            "groups_with_count_below_5": groups_below_five,
+            "records_in_groups_below_5": records_in_small_groups,
+            "records_in_groups_below_5_percent": round(
+                100.0 * records_in_small_groups / population, 2
+            ),
+            "exact_count_differencing": {
+                "source_total": total,
+                "count_after_excluding_one_selected_record": excluded,
+                "disclosed_count_difference": total - excluded,
+                "single_record_presence_disclosed": total - excluded == 1,
+            },
+        },
+        "thresholds": {
+            "k_anonymity_threshold": 5,
+            "rare_reason_code_distinct_patient_threshold": 5,
+            "small_aggregate_cell_threshold": 5,
+        },
+        "interpretation": (
+            "Synthetic source-only measurements. k-anonymity and small-cell "
+            "counts describe the released quasi-identifiers; they are not a "
+            "formal privacy guarantee. reason_code is only a condition-like "
+            "encounter attribute available in this schema."
+        ),
+    }
+    attempt.observe(**summary)
+    _privacy_evidence(attempt, "aggregate_inference", summary)
 
 
 def quasi_identifier_linkage(attempt):
-    columns = ["patient_token", "age_band", "sex", "zip"]
+    source_patients, source_encounters, boundary_tokens, manifest = (
+        _privacy_source_population(attempt)
+    )
+    population = len(source_patients)
     rows = attempt.sql(
-        "SELECT patient_token, age_band, sex, zip FROM hospital.silver.patients", "researcher"
+        "SELECT patient_token, age_band, sex, zip "
+        "FROM hospital.silver.patients",
+        "researcher",
     )
-    compare(
-        attempt,
-        rows,
-        attempt.access.oracle.rows("researcher", "patients", columns),
-        "patients",
-        columns,
+    source_rows = [row for row in rows if row[0] not in boundary_tokens]
+    actual = {row[0]: tuple(row[1:]) for row in source_rows}
+    expected = {
+        row["patient_token"]: (
+            row.get("age_band"),
+            row.get("sex"),
+            masked_value("patients", "zip", row.get("zip")),
+        )
+        for row in source_patients
+    }
+    attempt.expect(
+        actual == expected,
+        expected="Researcher-visible demographic QIs match the source-only masked oracle",
+        observed={"source_patients": population, "source_rows_returned": len(actual)},
     )
-    # Simulated attacker auxiliary data uses pre-write ground truth, not a
-    # privileged SQL query or patient_token as a linkage feature.
-    auxiliary = [
-        [
-            row["patient_token"],
-            row["age_band"],
-            row["sex"],
-            masked_value("patients", "zip", row["zip"]),
-        ]
-        for row in attempt.access.oracle.data["patients"]
+
+    source_records = [
+        {
+            "patient_token": row["patient_token"],
+            "age_band": row.get("age_band"),
+            "sex": row.get("sex"),
+            "zip": masked_value("patients", "zip", row.get("zip")),
+        }
+        for row in source_patients
     ]
-    metrics = linkage_metrics(rows, auxiliary)
-    attempt.observe(
-        quasi_identifiers=columns[1:],
-        metrics=metrics,
-        attacker_model="Exact auxiliary age band, sex and ZIP prefix; synthetic population only.",
+    profiles, rare_summary = rare_reason_code_profiles(
+        source_patients, source_encounters, rare_threshold=5
     )
-    if metrics["correct_links"]:
+    rare_by_token = {
+        row["patient_token"]: row["rare_reason_codes"] for row in profiles
+    }
+    for row in source_records:
+        row["rare_reason_codes"] = rare_by_token[row["patient_token"]]
+
+    demographic_linkage = linkage_metrics(
+        [
+            (row["patient_token"], row["age_band"], row["sex"], row["zip"])
+            for row in source_records
+        ],
+        [
+            (row["patient_token"], row["age_band"], row["sex"], row["zip"])
+            for row in source_records
+        ],
+    )
+    condition_profile_linkage = linkage_metrics(
+        [
+            (
+                row["patient_token"],
+                row["age_band"],
+                row["sex"],
+                row["zip"],
+                row["rare_reason_codes"],
+            )
+            for row in source_records
+        ],
+        [
+            (
+                row["patient_token"],
+                row["age_band"],
+                row["sex"],
+                row["zip"],
+                row["rare_reason_codes"],
+            )
+            for row in source_records
+        ],
+    )
+    summary = {
+        "source": {
+            "source": manifest.get("parameters", {}).get("source", "unknown"),
+            "source_version": manifest.get("parameters", {}).get("version"),
+            "population_requested": manifest.get("parameters", {}).get("population"),
+            "population_measured": population,
+            "seed": manifest.get("parameters", {}).get("seed"),
+            "reference_date": manifest.get("parameters", {}).get("reference_date"),
+            "boundary_fixture_patients_excluded": len(boundary_tokens),
+        },
+        "quasi_identifiers": ["age_band", "sex", "masked_zip_prefix"],
+        "attacker_model": (
+            "Attacker has exact auxiliary quasi-identifiers for the same synthetic "
+            "cohort; HMAC token is used only to score correctness, never as a feature."
+        ),
+        "demographic_linkage": demographic_linkage,
+        "demographic_plus_rare_reason_codes_linkage": condition_profile_linkage,
+        "rare_reason_code_summary": rare_summary,
+        "interpretation": (
+            "Synthetic source-only linkage simulation. A successful match is "
+            "a measured linkage under the stated auxiliary-data model, not a "
+            "real-world identification probability or anonymity assessment."
+        ),
+    }
+    attempt.observe(**summary)
+    _privacy_evidence(attempt, "quasi_identifier_linkage", summary)
+    if demographic_linkage["correct_links"] or condition_profile_linkage["correct_links"]:
         attempt.row.update(
             status="leaked",
-            reason="Measured residual linkage risk: unique released QIs identify synthetic ground-truth patients under the stated auxiliary-data model.",
+            reason=(
+                "Measured residual linkage risk: one or more source-only "
+                "quasi-identifier profiles uniquely matched synthetic ground truth."
+            ),
         )
     else:
         attempt.row.update(
             status="inconclusive",
-            reason="No unique correct links in this synthetic population; this does not prove anonymity.",
+            reason=(
+                "No correct unique links were measured in this synthetic population; "
+                "this does not prove anonymity."
+            ),
         )
 
 
