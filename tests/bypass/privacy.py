@@ -21,8 +21,6 @@ def _validated_columns(rows, quasi_identifiers):
 def equivalence_class_metrics(rows, quasi_identifiers):
     """Return k-anonymity summary for the supplied released QI columns."""
     columns = _validated_columns(rows, quasi_identifiers)
-    if not columns:
-        raise ValueError("At least one quasi-identifier is required")
     counts = Counter(tuple(row.get(column) for column in columns) for row in rows)
     population = len(rows)
     if not population:
@@ -44,7 +42,7 @@ def equivalence_class_metrics(rows, quasi_identifiers):
         "unique_records": unique,
         "unique_percent": 100.0 * unique / population,
         "class_size_histogram": {
-            str(size): sum(count for count in counts.values() if count == size)
+            str(size): sum(1 for count in counts.values() if count == size)
             for size in sorted(set(counts.values()))
         },
     }
@@ -92,13 +90,13 @@ def quasi_identifier_linkage_metrics(released, auxiliary, *, quasi_identifiers):
     index = defaultdict(set)
     for row in released:
         key = tuple(row.get(column) for column in columns)
-        if all(value is not None for value in key):
+        if all(value not in (None, "") for value in key):
             index[key].add(row["patient_token"])
 
     complete = attempted = correct = 0
     for row in auxiliary:
         key = tuple(row.get(column) for column in columns)
-        if any(value is None for value in key):
+        if any(value in (None, "") for value in key):
             continue
         complete += 1
         candidates = index.get(key, set())
