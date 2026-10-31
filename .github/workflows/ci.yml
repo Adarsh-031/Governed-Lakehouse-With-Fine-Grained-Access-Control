@@ -136,12 +136,16 @@ jobs:
           ACCESS_TEST_SOURCE: ${{ github.workspace }}/data/raw/synthea/1000-seed42
         run: uv run --no-sync pytest tests/bypass -v --strict-config --strict-markers --junitxml=bypass-test-results.xml
 
-      - name: Publish aggregate-only issue #24 privacy metrics
+      - name: Summarize bypass outcomes without identifiers
+        if: always()
+        run: uv run --no-sync python scripts/results_summary.py 'results/raw/bypass-*' results/raw/ci-summary
+
+      - name: Publish aggregate-only bypass, audit-coverage and privacy summaries
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: issue-24-privacy-metrics
-          path: results/raw/bypass-*/issue-24-*.json
+          path: results/raw/ci-summary/
           if-no-files-found: ignore
           retention-days: 7
 
