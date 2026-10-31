@@ -129,9 +129,7 @@ def test_rare_condition_prevalence_counts_distinct_patients_not_encounters():
         {"patient_token": "p1", "reason_code": "REPEATED"},
         {"patient_token": "p2", "reason_code": "REPEATED"},
     ]
-    result = with_rare_condition_signatures(
-        patients, encounters, threshold_percent=25
-    )
+    result = with_rare_condition_signatures(patients, encounters, threshold_percent=25)
     assert [row["rare_condition_signature"] for row in result] == [
         (),
         (),
