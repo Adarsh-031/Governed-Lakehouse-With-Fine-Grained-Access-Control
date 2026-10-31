@@ -388,7 +388,12 @@ def aggregate_inference(attempt):
     )
 
     qi_sets = {
+        "age_band": ("age_band",),
+        "sex": ("sex",),
+        "masked_zip_prefix": ("zip",),
         "age_band_sex": ("age_band", "sex"),
+        "age_band_masked_zip": ("age_band", "zip"),
+        "sex_masked_zip": ("sex", "zip"),
         "age_band_sex_masked_zip": ("age_band", "sex", "zip"),
         "age_band_sex_masked_zip_rare_reason_codes": (
             "age_band", "sex", "zip", "rare_reason_codes"
