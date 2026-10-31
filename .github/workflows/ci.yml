@@ -80,6 +80,13 @@ jobs:
         # Includes the schema/classification/access-contract drift checks.
         run: uv run --no-sync pytest tests/unit -v --strict-config --strict-markers --junitxml=unit-test-results.xml
 
+      # Set DOCKERHUB_USERNAME and DOCKERHUB_TOKEN in repository Actions secrets.
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Verify private storage and service permissions
         env:
           RUN_STORAGE_INTEGRATION: "1"
