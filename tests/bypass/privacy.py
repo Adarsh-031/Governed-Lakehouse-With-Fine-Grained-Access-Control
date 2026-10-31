@@ -132,7 +132,9 @@ def rare_reason_code_profiles(
 
     summary = {
         "attribute": "encounters.reason_code",
-        "interpretation": "researcher-visible encounter reason-code proxy, not a complete diagnosis table",
+        "interpretation": (
+            "Researcher-visible encounter reason-code proxy, not a complete diagnosis table"
+        ),
         "rare_threshold_distinct_patients": rare_threshold,
         "distinct_reason_codes": len(code_patients),
         "rare_reason_code_count": len(rare_codes),
