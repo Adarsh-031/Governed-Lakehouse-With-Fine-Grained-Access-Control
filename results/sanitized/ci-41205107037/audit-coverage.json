@@ -1,0 +1,17 @@
+{
+  "coverage_percent": 100.0,
+  "duplicate_event_count": 0,
+  "expected_event_types": [
+    "QueryCreated",
+    "QueryCompleted"
+  ],
+  "expected_query_count": 4,
+  "invalid_event_count": 0,
+  "measured_at_utc": "2026-10-31T13:35:47.673223+00:00",
+  "missing_event_count": 0,
+  "missing_query_count": 0,
+  "observed_expected_query_count": 4,
+  "outage_ended_utc": "2026-10-31T13:35:34.729794+00:00",
+  "outage_started_utc": "2026-10-31T13:35:25.456873+00:00",
+  "unexpected_event_count": 0
+}

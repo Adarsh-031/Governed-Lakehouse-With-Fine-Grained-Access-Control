@@ -1,0 +1,13 @@
+case,expected,status,reason
+anonymous_object_read,blocked,blocked,All attempted authorization boundaries held.
+catalog_direct_access,blocked,blocked,All attempted authorization boundaries held.
+doctor_other_patient,zero unauthorized rows,blocked,All attempted authorization boundaries held.
+identity_impersonation,blocked,blocked,All attempted authorization boundaries held.
+admin_operations,blocked for all SQL users,blocked,All attempted authorization boundaries held.
+bronze_query,blocked for ordinary users,blocked,All attempted authorization boundaries held.
+old_snapshot_query,no unauthorized identifiers,blocked,All attempted authorization boundaries held.
+join_or_view_bypass,no additional access,blocked,All attempted authorization boundaries held.
+metadata_enumeration,no sensitive leakage,blocked,All attempted authorization boundaries held.
+aggregate_inference,blocked after #46 (cells >= 11; no patient key),blocked,Mitigated by #46: row-level quasi-identifiers and reason codes are denied to research; aggregate releases publish only cells with >= 11 patients and carry no patient key. Before/after metrics are in the private report.
+quasi_identifier_linkage,blocked after #46 (no row-level quasi-identifiers),blocked,"Mitigated by #46: research rows carry only the pseudonymous token, so the auxiliary quasi-identifiers match nothing; aggregate cells hold at least 11 patients. Synthetic population only; not an anonymity proof."
+audit_collector_outage,measure query-level coverage and quantify outage loss or recovery,blocked,All known queries have both lifecycle events after collector restart; the audit writer stored no duplicate query/event pairs.
