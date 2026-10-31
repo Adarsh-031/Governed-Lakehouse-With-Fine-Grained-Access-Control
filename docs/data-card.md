@@ -112,6 +112,8 @@ The 10k and 100k generations/benchmarks have not been run for this work.
 | Median and p95 latency, cold and warm | TODO — measure during benchmark |
 | CPU and memory under repeated workloads | TODO — measure during benchmark |
 | Baseline versus policy-enforced overhead | TODO — measure equivalent outputs during benchmark |
+| Researcher-visible k-anonymity / small-cell risk at 1k | Automated by issue #24; use the privacy risk workflow artifact for the measured run |
+| Researcher-visible k-anonymity / small-cell risk at 10k | Optional manual issue #24 workflow run; not assumed until executed |
 
 Do not infer storage footprint, scale capacity, latency, or policy overhead
 from source row counts. Record hardware, image versions, seed, table snapshots,
