@@ -1,10 +1,12 @@
 """Every inventory case produces evidence, including measured residual risks."""
 
 import json
+import os
 import ssl
 import time
 from collections import Counter
 from datetime import UTC, datetime
+from pathlib import Path
 
 import httpx
 import pytest
@@ -357,10 +359,6 @@ def aggregate_inference(attempt):
 
     # A separate query validates that the rare-code prevalence calculation uses
     # the researcher-visible reason_code field, counting distinct patients.
-    expected_prevalence = Counter()
-    for row in source_encounters:
-        if row.get("reason_code") is not None:
-            expected_prevalence[str(row["reason_code"]).strip()] += 0
     code_patients = {}
     for row in source_encounters:
         code = row.get("reason_code")
