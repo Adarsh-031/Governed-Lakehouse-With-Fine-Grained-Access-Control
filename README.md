@@ -70,6 +70,13 @@ Design decisions: [architecture and ADRs](docs/architecture.md),
 Needs Docker with Compose v2 (on Windows, inside WSL2), `uv`, Java 17+, OpenSSL,
 Bash and about 8 GB of free RAM. Tested on Ubuntu (WSL2).
 
+**Quick start:** `./start.sh` runs every step below and opens the dashboard at
+<http://localhost:8501>. It is safe to re-run; existing secrets and data are kept.
+`./stop.sh` stops the services without deleting anything. Options:
+`--patients N`, `--seed S`, `--no-dashboard`.
+
+Manual steps:
+
 ```sh
 # 1. Install
 uv sync --locked --group dev
