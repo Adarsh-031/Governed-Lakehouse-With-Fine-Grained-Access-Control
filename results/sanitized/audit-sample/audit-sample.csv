@@ -1,0 +1,19 @@
+query_id,event_type,authenticated_user,status,error_code,tables,columns,row_filter_tables,masked_columns,output_rows_if_available,event_timestamp,policy_version
+q001,QueryCreated,doctor_alice,running,,,,,,,2026-11-01 05:07:53.592000,clinical-v1
+q001,QueryCompleted,doctor_alice,success,,hospital.silver.care_team;hospital.silver.patients,doctor_user;patient_token;valid_from;valid_to,hospital.silver.patients,,1,2026-11-01 05:07:56.231000,clinical-v1
+q002,QueryCreated,doctor_alice,running,,,,,,,2026-11-01 05:08:29.144000,clinical-v1
+q002,QueryCompleted,doctor_alice,authorization_denial,PERMISSION_DENIED,,,,,0,2026-11-01 05:08:29.185000,clinical-v1
+q003,QueryCreated,doctor_alice,running,,,,,,,2026-11-01 05:08:43.776000,clinical-v1
+q003,QueryCompleted,doctor_alice,success,,hospital.silver.care_team;hospital.silver.patients,doctor_user;patient_token;valid_from;valid_to;zip,hospital.silver.patients,,5,2026-11-01 05:08:44.183000,clinical-v1
+q004,QueryCreated,billing,running,,,,,,,2026-11-01 05:13:13.755000,clinical-v1
+q004,QueryCompleted,billing,success,,,,,,1,2026-11-01 05:13:13.819000,clinical-v1
+q005,QueryCreated,billing,running,,,,,,,2026-11-01 05:13:23.559000,clinical-v1
+q005,QueryCompleted,billing,success,,hospital.silver.claims,claim_id;encounter_id;patient_token;payer;payer_coverage;procedure_code;total_cost,,,20,2026-11-01 05:13:24.117000,clinical-v1
+q006,QueryCreated,billing,running,,,,,,,2026-11-01 05:13:55.622000,clinical-v1
+q006,QueryCompleted,billing,authorization_denial,PERMISSION_DENIED,,,,,0,2026-11-01 05:13:55.662000,clinical-v1
+q007,QueryCreated,billing,running,,,,,,,2026-11-01 05:14:03.662000,clinical-v1
+q007,QueryCompleted,billing,success,,,,,,1,2026-11-01 05:14:03.685000,clinical-v1
+q008,QueryCreated,billing,running,,,,,,,2026-11-01 05:14:19.341000,clinical-v1
+q008,QueryCompleted,billing,success,,hospital.silver.claims,claim_id;encounter_id;patient_token;payer;payer_coverage;procedure_code;total_cost,,,20,2026-11-01 05:14:19.525000,clinical-v1
+q009,QueryCreated,admin,running,,,,,,,2026-11-01 08:12:41.686000,clinical-v1
+q009,QueryCompleted,admin,authorization_denial,PERMISSION_DENIED,,,,,0,2026-11-01 08:12:42.143000,clinical-v1
