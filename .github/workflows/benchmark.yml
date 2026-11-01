@@ -22,7 +22,7 @@ jobs:
   benchmark:
     name: Policy overhead benchmark
     if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-benchmark'
-    runs-on: instabox-medium
+    runs-on: ubuntu-latest
     timeout-minutes: 180
     env:
       SCALES: ${{ inputs.scales || '1000 10000' }}

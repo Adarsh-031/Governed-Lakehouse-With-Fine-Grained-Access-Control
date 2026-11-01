@@ -17,7 +17,7 @@ concurrency:
 jobs:
   quality:
     name: Code and configuration checks
-    runs-on: instabox-medium
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
