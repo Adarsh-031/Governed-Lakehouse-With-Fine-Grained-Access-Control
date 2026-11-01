@@ -2,7 +2,8 @@
 
 Reads ``audit.audit.query_events`` as ``admin`` over TLS and writes the newest
 rows to ``results/sanitized/audit-sample/audit-sample.csv``. The audit writer
-already stores no SQL text, literals or error messages; this export additionally
+already stores no SQL text, literals or error messages, and the policy hides even
+the redacted ``query_text_restricted`` column from admin; this export additionally
 replaces Trino query IDs with sequence labels (q001, q002, ...) so the sample
 cannot be matched against server logs. Usage::
 
@@ -27,7 +28,6 @@ COLUMNS = (
     "row_filter_tables",
     "masked_columns",
     "output_rows_if_available",
-    "query_text_restricted",
     "event_timestamp",
     "policy_version",
 )

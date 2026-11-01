@@ -13,6 +13,6 @@ authenticated user, tables and columns touched, which tables had a row filter,
 which columns were masked, row count and status (`success`,
 `authorization_denial`, `sql_failure`).
 
-What is not in it: SQL text (stored only as `[REDACTED]`), literal values, error
+What is not in it: SQL text (stored only as `[REDACTED]`, and that column is denied even to admin by `policies/rules.json`), literal values, error
 messages, patient tokens or data values. Trino query IDs are replaced with
 `q001`, `q002`, ... in the export so the sample cannot be matched to server logs.
