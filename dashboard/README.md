@@ -41,7 +41,7 @@ The examples are role-aware and explicitly list columns so hidden-column rules
 do not make an otherwise permitted `SELECT *` fail:
 
 - **Doctor:** patients and encounters are filtered by the active care-team assignment for the authenticated doctor. The claims example is expected to be denied.
-- **Researcher:** patients and encounters are available within the MVP cohort; ZIP and encounter times are masked by Trino, birthdate and free-text descriptions are hidden. The claims example is expected to be denied.
+- **Researcher:** aggregate releases in `hospital.gold` (distinct-patient counts, no cell under 11). Row-level patients expose only the token; encounter times are truncated to the month and reason codes/descriptions are hidden ([#46](../docs/issue-46.md)). The claims example is expected to be denied.
 - **Billing:** claims are available with approved reconciliation fields; procedure descriptions are hidden. Patient demographics are expected to be denied.
 - **Admin:** patients, encounters, claims, and care-team verification are read-only; restricted identity records remain denied. Restricted audit query text is not exposed.
 

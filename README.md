@@ -1,122 +1,171 @@
 
-# Governed Hospital Lakehouse
+# Governed Hospital Lakehouse with Fine-Grained Access Control
 
-Status: private object storage and an authenticated Lakekeeper/Postgres catalog
-are runnable alongside Trino 476 with HTTPS password login and system file
-authorization. Docker acceptance tests cover Iceberg create/read, persistence,
-and synthetic row-filter/mask enforcement. Reproducible Synthea CSV generation
-and public MIMIC-IV demo acquisition are available. Synthea-to-silver Iceberg
-ingestion includes seeded care-team assignments, saved doctor patient sets, and
-ETL-only restricted identity. Clinical file policies implement role SELECT grants,
-doctor care-team row filters, hidden columns, researcher masks and aggregate-only
-researcher releases (`hospital.gold`, cells of at least 11 patients; see
-[#46](docs/issue-46.md)). DDL is available
-with isolated Trino/Iceberg acceptance coverage; see [schema setup](sql/schema/README.md).
+BDSRAE Level 3, Project 5 · Adarsha E (PES1UG24AM334), Abdul Mateen Shaikh (PES1UG24AM332)
 
-## Goal
-Shared synthetic hospital tables queried through Trino with authenticated
-per-user row filters and column masks. Evaluate access restrictions, audit
-coverage, residual leakage, and measured systems overhead.
+One shared set of synthetic hospital tables, queried through a single SQL engine
+that shows each person only what their role allows. Doctors see only their own
+care-team patients, researchers see only aggregate counts (no cell under 11
+patients), billing sees claims with tokenized patient IDs, and every query,
+allowed or denied, lands in an append-only audit table.
+
+![Architecture](docs/architecture.png)
+
+## Results at a glance
+
+All numbers come from committed evidence; nothing below is estimated.
+
+| What we measured | Result | Evidence |
+|---|---|---|
+| Access matrix, doctor filters, masks, denials (live Trino) | 585/585 checks pass | [CI run 41205107037](results/sanitized/ci-41205107037/) |
+| Bypass attempts (12 attack types) | **12/12 blocked** (first run: 9 blocked, 2 leaked, 1 inconclusive) | [bypass report](docs/bypass-report.md) |
+| Re-identification by linkage, researcher view | 9.3% → **0%**; with rare diagnoses 75.2% → **0%** | [bypass report](docs/bypass-report.md), [#46](docs/issue-46.md) |
+| Count differencing on one patient | possible → **not possible** | same |
+| Audit during collector outage | 4 queries, 8/8 events, 0 missing, 0 duplicates | [audit coverage](results/sanitized/ci-41205107037/audit-coverage.json) |
+| Policy overhead, 1k and 10k patients | 12/12 identical results, 0 unauthorized rows; warm median −2.1% / +1.2% (within noise) | [benchmark run](results/raw/bench-20261030T174823Z/) |
+| Unit tests | 836 pass | CI |
+
+Figures: [`results/figures/`](results/figures/), built by
+[`notebooks/results.ipynb`](notebooks/results.ipynb). Audit sample:
+[`results/sanitized/audit-sample/`](results/sanitized/audit-sample/).
+
+## Who sees what
+
+| Role | Patients | Encounters | Claims | Research aggregates | Identity (names) | Audit |
+|---|---|---|---|---|---|---|
+| Doctor (`doctor_alice`, `doctor_bob`) | own active care team only | own care team only | denied | denied | denied | denied |
+| Researcher | token only | month-level times, no reason codes | denied | `hospital.gold`, cells ≥ 11 | denied | denied |
+| Billing | denied | denied | approved fields, tokenized patient | denied | denied | denied |
+| Admin (read-only) | read | read | read | read | denied | read (SQL text hidden) |
+
+The full decision per column is in [`policies/access-matrix.csv`](policies/access-matrix.csv);
+[`scripts/policy.py`](scripts/policy.py) compiles it to the deployed
+[`policies/rules.json`](policies/rules.json) and records a version digest.
 
 ## Architecture
-Synthea -> Python ETL -> Iceberg tables on private S3-compatible storage.
-Trino resolves tables through a private REST catalog and enforces policies.
-Query events -> external durable collector -> batched audit Iceberg table.
-Optional views and dashboard are consumers, not authorization boundaries.
 
-Bronze: restricted raw exports (CSV objects; an Iceberg bronze layer is optional).
-Silver: typed, validated shared tables with consistent patient tokens.
-Gold: approved analytical fields/views; retain base-table restrictions.
-Keep necessary clinical identity data in a separately restricted identity table.
+- **Data:** [Synthea 3.4.0](docs/data-card.md), seed 42, 1,000 (and 10,000 for the
+  benchmark) synthetic Massachusetts patients. No real patient data.
+- **ETL** ([`ingest/`](ingest/)): Python, pandas, PyArrow, PyIceberg. Patient IDs
+  become HMAC tokens, ages become bands, care-team assignments are generated
+  with a fixed seed, names go to a separate restricted identity warehouse, and
+  every load rebuilds the researcher aggregate releases.
+- **Storage:** Apache Iceberg tables on Silo (S3-compatible, private bucket),
+  registered in a Lakekeeper REST catalog (Postgres, Keycloak, OpenFGA).
+- **Query and policy:** Trino 476 is the only way in for people. Password login
+  over HTTPS, file-based access control with row filters and column masks,
+  deny by default, read-only, no DDL or grants.
+- **Audit** ([`audit/`](audit/)): Trino's HTTP event listener → FastAPI collector
+  (fsync to a spool before acknowledging) → batch writer (de-duplicates on query
+  and event type) → append-only Iceberg table `audit.audit.query_events`, readable
+  only by admin. SQL text and literal values are never stored.
+- **Dashboard** ([`dashboard/`](dashboard/)): a Streamlit demo client. It holds no
+  privileges; Trino is the boundary.
 
-## Local development
-1. Install uv separately if needed, then run `uv sync --group dev`.
-2. Commit the resulting uv.lock after reviewing resolved dependencies.
-3. With Bash and OpenSSL installed, run `./scripts/init_secrets.sh` to generate
-   all local credentials and TLS files under `data/secrets/`. Repeating the
-   command preserves existing secrets. See [secret setup](scripts/README.md)
-   for output files, loading variables, and explicit rotation.
-4. Use the service image pins and catalog decision in
-   [ADR-001](docs/architecture.md#adr-001-rest-catalog-and-service-versions).
-5. Start private storage and initialize its bucket/service permissions:
-   `docker compose --env-file data/secrets/runtime.env up -d --wait storage`, then
-   `docker compose --env-file data/secrets/runtime.env run --rm storage-init`.
-   See [storage setup and checks](docker/storage/README.md).
-6. Build the private catalog tools, start the catalog and its authentication/
-   database dependencies, register the warehouse, and prove Iceberg writes/reads:
-   `docker compose --env-file data/secrets/runtime.env build catalog-init`,
-   `docker compose --env-file data/secrets/runtime.env up -d --wait catalog`,
-   `docker compose --env-file data/secrets/runtime.env run --rm --no-deps catalog-init`,
-   `docker compose --env-file data/secrets/runtime.env run --rm --no-deps catalog-check`.
-   See [catalog setup, decisions, and checks](docker/catalog/README.md).
-   `compose.yaml.example` retains the complete image inventory.
-7. Start the HTTPS query boundary with
-   `docker compose --env-file data/secrets/runtime.env up -d --wait trino`.
-   See [Trino setup, login, and policy verification](docker/trino/README.md),
-   including secret-file UID/GID overrides when your host user is not UID 1000.
-   Generate raw sources with `./scripts/generate_synthea.sh --patients 1000 --seed 42`
-   (Java 17+), and optionally `./scripts/download_mimic_demo.sh` for the separate
-   public clinical demo. See the [data card](docs/data-card.md) for reproduction,
-   measured row counts, and larger populations. Load the sample with
-   `./scripts/ingest.sh`; see the [ingestion mapping and checks](ingest/README.md#synthea-to-silver-issue-16).
-8. Check the policy and retain its digest with each experiment:
-   `uv run --locked python scripts/policy.py --experiment-dir results/raw/run-001/policy`.
-   After pulling #18, recreate Trino to add its second read-only controller mount:
-   `docker compose --env-file data/secrets/runtime.env up -d --wait --force-recreate --no-deps trino`.
-   Run clinical checks with `RUN_POLICY_INTEGRATION=1 uv run --locked --group dev pytest tests/integration/test_policy.py -v`.
-   See [policy implementation](policies/IMPLEMENTATION.md) and
-   [issue #18 decisions/viva notes](docs/issue-18.md).
-   Verify the independent oracle with `RUN_ACCESS_INTEGRATION=1 uv run --locked
-   --group dev pytest tests/access -v`; see [access acceptance](tests/access/README.md)
-   and [issue #19 decisions](docs/issue-19.md).
-   Run the bypass investigation with `RUN_BYPASS_INTEGRATION=1 uv run --locked
-   --group dev pytest tests/bypass -v`; see [suite and evidence](tests/bypass/README.md)
-   and [findings and decisions](docs/bypass-report.md). Residual researcher privacy
-   risks are measured separately from authorization failures; the #22 audit outage
-   case now reconciles known query IDs across a collector stop/restart.
+Design decisions: [architecture and ADRs](docs/architecture.md),
+[threat model](docs/threat-model.md), [data card](docs/data-card.md).
 
-## Build order
-- [x] Choose catalog implementation and pin service versions (ADR-001).
-- [x] Bring up private storage/catalog and authenticated Trino over TLS.
-- [x] Generate a reproducible 1k Synthea source sample and acquire the public MIMIC-IV demo.
-- [x] Load and validate patients, encounters, and charge-level claims.
-- [x] Generate and load care_team assignments and restricted identity (#17).
-- [x] Restrict identities; implement doctor filters and researcher masks/billing projections (#18).
-- [x] Implement durable audit collection and query-ID reconciliation (#20-#22); fresh outage evidence is generated by the bypass test.
-- [x] Verify authenticated access with independent doctor/mask oracles (#19).
-- [x] Automate all bypass cases and report findings/reasons (#23), including the real audit collector outage case (#22).
-- [ ] Run scale and equivalent-output policy-overhead benchmarks.
-- [ ] Produce notebook, data card, threat model, bypass report, 3-5 page report.
-- [ ] Record 3-minute demo and prepare 8-10 minute presentation.
+## Run it locally
 
-## Scope and honesty
-HMAC is pseudonymization, not reversible encryption or anonymization.
-Generalization does not establish k-anonymity without measurement.
-Append-only grants do not establish tamper evidence.
-Query logs do not prove exactly which patient records a person viewed.
-Secret-generation tests check local credentials, TLS, permissions, and reruns.
-Storage acceptance tests check anonymous denial, service S3 permissions, bootstrap
-reruns, and persistence. Catalog acceptance tests check authenticated PyIceberg
-create/append/read, service grants, and unchanged data/snapshots after recreating
-the catalog, storage, and all three databases. Trino acceptance tests check
-CA-verified HTTPS authentication, wrong-password rejection, impersonation denial,
-server-managed groups, private-service ports, and system row filters/masks on
-synthetic Iceberg data. Clinical acceptance checks the complete access matrix,
-source-derived doctor sets, date boundaries, mask outputs/types, metadata and
-forbidden operations. Audit collection and batch writing are implemented; outage coverage and any missing deliveries are measured by the #22 Docker case rather than assumed lossless. Internal services use HTTP
-on a private local Docker network; TLS currently covers client-to-Trino and
-Trino's single-node internal communication.
+Needs Docker with Compose v2 (on Windows, inside WSL2), `uv`, Java 17+, OpenSSL,
+Bash and about 8 GB of free RAM. Tested on Ubuntu (WSL2).
 
-Issue #5's [access contract](policies/README.md) now specifies every MVP
-role/table/column decision, row scope, and mask output against an explicit
-column inventory. Contract checks run in the unit suite; teammate sign-off is
-pending. Issue #18 now compiles and enforces that contract; audit admin SELECT
-is a reserved policy tested with isolated fixture data, pending its production
-read path. Identity remains denied to every interactive role.
+```sh
+# 1. Install
+uv sync --locked --group dev
+
+# 2. Secrets, users and TLS (written to data/secrets/, git-ignored)
+./scripts/init_secrets.sh
+export TRINO_UID=$(id -u) TRINO_GID=$(id -g) AUDIT_UID=$(id -u) AUDIT_GID=$(id -g)
+alias dc='docker compose --env-file data/secrets/runtime.env'
+
+# 3. Storage
+dc up -d --wait storage
+dc run --rm storage-init
+
+# 4. Catalog
+dc build catalog-init
+dc up -d --wait catalog
+dc run --rm --no-deps catalog-init
+
+# 5. Trino and the audit pipeline
+dc up -d --wait trino audit-writer
+
+# 6. Data: generate, then load silver, identity and gold
+./scripts/generate_synthea.sh --patients 1000 --seed 42
+./scripts/ingest.sh
+```
+
+Each user's password is in `data/secrets/runtime.env`
+(`TRINO_PASSWORD_DOCTOR_ALICE`, `..._RESEARCHER`, `..._BILLING`, `..._ADMIN`).
+
+```sh
+dc exec trino trino --server https://localhost:8443 --user doctor_alice \
+  --password --truststore-path /etc/trino/auth/ca.crt
+```
+
+Try:
+
+- `doctor_alice`: `SELECT count(*) FROM hospital.silver.patients;` → 600, her care team only.
+- `doctor_alice`: `SELECT claim_id FROM hospital.silver.claims LIMIT 5;` → Access Denied.
+- `researcher`: `SELECT * FROM hospital.gold.researcher_demographics ORDER BY patient_count LIMIT 5;` → smallest count is 11 or more.
+- anyone: `SELECT * FROM identity.identity.patient_identity;` → denied.
+- `admin`, a few seconds later: `SELECT event_type, authenticated_user, status FROM audit.audit.query_events;` → every query above, denials included.
+
+Dashboard:
+
+```sh
+export TRINO_HOST=localhost TRINO_PORT=8443 TRINO_CA_BUNDLE=data/secrets/ca.crt
+uv run --no-sync --with streamlit streamlit run dashboard/app.py
+```
+
+The Trino CLI may warn that JLine and `.trino_history` cannot be written inside
+the read-only container; this is harmless. Per-service details:
+[storage](docker/storage/README.md), [catalog](docker/catalog/README.md),
+[Trino](docker/trino/README.md), [ingestion](ingest/README.md),
+[audit writer](audit/writer.md).
+
+## Reproduce the evidence
+
+```sh
+uv run --locked --group dev pytest tests/unit                                   # unit
+RUN_ACCESS_INTEGRATION=1 uv run --locked --group dev pytest tests/access -v     # access matrix
+ACCESS_TEST_SOURCE="$PWD/data/raw/synthea/1000-seed42" \
+  RUN_BYPASS_INTEGRATION=1 uv run --locked --group dev pytest tests/bypass -v   # bypass + privacy + audit outage
+uv run --locked python bench/run.py --help                                      # policy-overhead benchmark
+uv run --locked python scripts/export_audit_sample.py --limit 40                # audit sample (stack running)
+```
+
+Integration suites start their own isolated Compose project with fresh random
+credentials and leave your stack alone. CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml))
+runs all of them on every push; the benchmark has its own workflow.
+Raw per-run evidence stays in git-ignored `results/raw/`; only aggregate
+summaries are committed.
+
+## Limits, stated plainly
+
+- HMAC tokens are pseudonyms, not anonymity: whoever holds the key can re-link them.
+- Small-cell suppression (≥ 11) is a disclosure rule, not a formal anonymity or
+  differential-privacy guarantee, and results are on synthetic data.
+- The audit table is append-only by grant, not tamper-evident. Query logs show
+  what was asked, not exactly which records a person read.
+- Admin and service credentials are trusted; host or key compromise is out of scope.
+- Internal service traffic is HTTP on a private Docker network; TLS covers
+  client-to-Trino.
+- 100,000-patient scale was not run.
 
 ## Repository map
-docker/: runtime configuration; ingest/: ETL and classification;
-policies/: access contract and policy implementation gate; audit/: collection contract;
-sql/: schemas, views, workloads; tests/: access and bypass checks;
-bench/: experiment plan; notebooks/: analysis; dashboard/: optional demo;
-docs/: submission documents; scripts/: orchestration; results/: evidence.
+
+| Path | Contents |
+|---|---|
+| `docker/`, `compose.yaml` | service configuration |
+| `ingest/` | ETL, tokenization, column classification, gold releases |
+| `policies/` | access contract and deployed Trino rules |
+| `audit/` | event normalizer, collector, writer |
+| `sql/` | schema DDL |
+| `tests/` | unit, integration, access and bypass suites |
+| `bench/` | benchmark plan, workload and runner |
+| `notebooks/`, `results/` | results notebook, figures, committed evidence |
+| `dashboard/` | Streamlit demo client |
+| `docs/` | data card, threat model, bypass report, architecture, issue notes |
+| `scripts/` | data generation, secrets, ingestion, policy, summaries |
