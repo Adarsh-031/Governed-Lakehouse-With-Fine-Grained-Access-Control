@@ -97,26 +97,28 @@ does not eliminate all linkage or inference risk.
 
 ### Benchmark size and measurement status
 
-The available generation commands and benchmark plan define target Synthea
-populations of **1,000, 10,000, and 100,000** patients. Only the 1,000-patient
-seed-42 source and its Silver ingestion have acceptance evidence so far.
-The 10k and 100k generations/benchmarks have not been run for this work.
+Measured in GitHub Actions run 41099548409 (4 vCPU AMD EPYC, ~7.8 GiB RAM), raw
+files in [`results/raw/bench-20261030T174823Z`](../results/raw/bench-20261030T174823Z/).
+The 1,000 and 10,000 patient seed-42 populations were generated, loaded and
+benchmarked. **100,000 patients was not run** (beyond the CI runner's memory and
+time budget); no figures are claimed for it.
 
-| Measurement | Status |
+| Silver table | Rows (1k) | Stored bytes (1k) | Rows (10k) | Stored bytes (10k) |
+|---|---:|---:|---:|---:|
+| `patients` | 1,000 | 44,088 | 10,000 | 411,741 |
+| `encounters` | 48,976 | 1,591,205 | 529,057 | 15,340,114 |
+| `claims` | 203,698 | 5,599,233 | 2,162,698 | 57,207,483 |
+| `care_team` | 1,200 | 36,902 | 12,000 | 354,701 |
+
+| Measurement | Result |
 |---|---|
-| 1k source CSV row counts | Measured; see Local sample inventory |
-| 1k Silver table row counts | Measured; see Silver table inventory and ingestion evidence |
-| 10k / 100k generation and load sizes | TODO — benchmark not run |
-| Stored bytes per table / total warehouse size | TODO — measure during benchmark |
-| Query input/output bytes | TODO — measure during benchmark |
-| Median and p95 latency, cold and warm | TODO — measure during benchmark |
-| CPU and memory under repeated workloads | TODO — measure during benchmark |
-| Baseline versus policy-enforced overhead | TODO — measure equivalent outputs during benchmark |
+| Result equivalence, enforced vs inlined-policy admin baseline | 12/12 queries identical row counts and fingerprints at both scales; 0 unauthorized rows |
+| Warm median policy overhead (10 runs per query) | -2.1% at 1k, +1.2% at 10k: within run-to-run noise |
+| Cold overhead (1 run after Trino restart) | median +9.4% at 1k, -4.5% at 10k; single runs, noisy |
+| CPU and peak memory per query | recorded per query in `summary-*.csv` |
 
-Do not infer storage footprint, scale capacity, latency, or policy overhead
-from source row counts. Record hardware, image versions, seed, table snapshots,
-policy digest, repetition count, and cache conditions with benchmark results,
-as specified in [the benchmark plan](../bench/plan.yaml).
+Hardware, image versions, seed, snapshot IDs, policy digest, repetitions and cache
+conditions are recorded in that directory's `environment.json` and policy snapshot.
 
 ### Governed Silver table inventory
 
@@ -130,9 +132,29 @@ Observed readback for the accepted 1,000-patient Synthea seed-42 load:
 | `silver.care_team` | 1,200 | Seeded synthetic doctor/patient assignments |
 | `identity.patient_identity` | 1,000 | Names in the separate restricted identity warehouse |
 
-These are observed row counts, not byte-size or performance measurements.
-Storage bytes, table sizes on disk, and the 10k/100k benchmark inventories
-remain TODO until the benchmark is run.
+These are observed row counts. Stored bytes and the 10k inventory are in the
+benchmark table above.
+
+### Researcher aggregate releases (`hospital.gold`, issue #46)
+
+Researchers do not query row-level clinical tables. Every ETL load rebuilds three
+aggregate tables from Silver with `ingest/release.py`:
+
+| Release | Grouped by | Counts |
+|---|---|---|
+| `gold.researcher_demographics` | age band, sex, race | distinct patients |
+| `gold.researcher_geography` | 3-digit ZIP prefix | distinct patients |
+| `gold.researcher_conditions` | encounter reason code | distinct patients |
+
+Rules: counts are **distinct patients**, not rows; there is no patient token or
+record-level column; any cell with fewer than **11** patients is dropped, not
+shown as a small number. On the 1,009-patient CI cohort (run 41205107037) the
+releases published 18, 18 and 84 cells, smallest cells 15, 13 and 11.
+Measured effect: quasi-identifier linkage fell from 9.3% (75.2% with rare
+diagnosis codes) to 0%, and count differencing is no longer possible (see the
+[bypass report](bypass-report.md)). Suppression is a disclosure-control rule,
+not a formal anonymity or differential-privacy guarantee, and hides rare
+subgroups from analysis.
 
 ## Sources and purpose
 
@@ -187,7 +209,7 @@ JAR with `--jar /path/to/synthea.jar`, and maximum heap with `--heap 4g`.
 `PYTHON=/path/to/python3` selects the launcher interpreter. An explicit JAR is
 still verified against the pinned checksum. Initial acceptance used a temporary
 Eclipse Temurin **17.0.21+9** runtime; the host's Java 8 was left unchanged.
-The 10k/100k commands are supported but were not executed for this issue;
+The 10k command was later run by the benchmark (above); 100k is supported but was not executed;
 generation time and disk usage must be measured before larger benchmarks.
 
 ## Fixed Synthea configuration
